@@ -1,0 +1,38 @@
+model Section {
+  id                 String    @id @default(uuid()) @db.Uuid
+  courseId           String    @db.Uuid
+  sectionNumber      Int
+  responsibleAdminId String    @db.Uuid
+  day                DayOfWeek
+  startMinute        Int
+  endMinute          Int
+  capacity           Int
+  isPublished        Boolean   @default(false)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(3)
+
+  course           Course                @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  responsibleAdmin CourseAdmin           @relation("ResponsibleCourseAdmin", fields: [courseId, responsibleAdminId], references: [courseId, adminId], onDelete: Restrict)
+  registrations    SectionRegistration[]
+
+  @@unique([courseId, sectionNumber])
+  @@unique([id, courseId])
+  @@index([courseId, isPublished])
+  @@index([courseId, responsibleAdminId])
+}
+
+model SectionRegistration {
+  id        String   @id @default(uuid()) @db.Uuid
+  studentId String   @db.Uuid
+  courseId  String   @db.Uuid
+  sectionId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  enrollment CourseEnrollment @relation(fields: [studentId, courseId], references: [studentId, courseId], onDelete: Restrict)
+  section    Section          @relation(fields: [sectionId, courseId], references: [id, courseId], onDelete: Restrict)
+
+  @@unique([studentId, courseId])
+  @@index([sectionId])
+  @@index([courseId, studentId])
+}

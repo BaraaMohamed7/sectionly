@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Locale {
+  AR
+  EN
+}
+
+enum DayOfWeek {
+  SATURDAY
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+}
+
+enum NotificationType {
+  COURSE_REMOVED_WITH_SECTION
+}

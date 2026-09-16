@@ -1,0 +1,29 @@
+model Announcement {
+  id        String   @id @default(uuid()) @db.Uuid
+  courseId  String   @db.Uuid
+  authorId  String   @db.Uuid
+  title     String
+  content   String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  author User   @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([courseId, createdAt(sort: Desc)])
+}
+
+model AdminNotification {
+  id          String           @id @default(uuid()) @db.Uuid
+  recipientId String           @db.Uuid
+  courseId    String           @db.Uuid
+  type        NotificationType
+  metadata    Json
+  readAt      DateTime?        @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+
+  recipient User   @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Restrict)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@index([recipientId, readAt, createdAt(sort: Desc)])
+}

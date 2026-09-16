@@ -1,0 +1,49 @@
+model Course {
+  id                   String    @id @default(uuid()) @db.Uuid
+  code                 String    @unique
+  nameAr               String
+  nameEn               String
+  creditHours          Int
+  registrationOpensAt  DateTime? @db.Timestamptz(3)
+  registrationClosesAt DateTime? @db.Timestamptz(3)
+  switchingOpensAt     DateTime? @db.Timestamptz(3)
+  switchingClosesAt    DateTime? @db.Timestamptz(3)
+  registrationPaused   Boolean   @default(false)
+  switchingPaused      Boolean   @default(false)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
+
+  admins        CourseAdmin[]
+  enrollments   CourseEnrollment[]
+  sections      Section[]
+  announcements Announcement[]
+  notifications AdminNotification[]
+  auditLogs     AuditLog[]
+}
+
+model CourseAdmin {
+  courseId   String   @db.Uuid
+  adminId    String   @db.Uuid
+  isPrimary  Boolean  @default(false)
+  assignedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  course              Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  admin               User      @relation("CourseAdminUser", fields: [adminId], references: [id], onDelete: Restrict)
+  responsibleSections Section[] @relation("ResponsibleCourseAdmin")
+
+  @@id([courseId, adminId])
+  @@index([adminId, courseId])
+}
+
+model CourseEnrollment {
+  studentId String   @db.Uuid
+  courseId  String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  student             User                 @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Restrict)
+  course              Course               @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  sectionRegistration SectionRegistration?
+
+  @@id([studentId, courseId])
+  @@index([courseId, studentId])
+}

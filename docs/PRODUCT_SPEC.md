@@ -262,7 +262,7 @@ A course supports:
 
 - assigned Admins,
 
-- one primary Admin,
+- zero or one primary Admin,
 
 - sections,
 
@@ -284,7 +284,7 @@ Semester/history modeling is intentionally deferred to a future version.
 
 A course may have multiple assigned Admins.
 
-One may be marked as primary.
+Zero or one assigned Admin may be marked as primary.
 
 All assigned Admins can manage the course.
 
