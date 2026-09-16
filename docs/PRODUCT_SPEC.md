@@ -142,7 +142,11 @@ Email must be unique.
 
 University ID must be unique.
 
+Email must be valid, but a university-domain email is not required.
+
 No email OTP or university verification is required for the MVP.
+
+After account creation, the Student is authenticated automatically and continues directly through onboarding.
 
 ---
 
@@ -187,7 +191,9 @@ Students select the courses they are currently taking.
 
 Each course contains:
 
-- name,
+- Arabic name,
+
+- English name,
 
 - unique course code,
 
@@ -276,6 +282,8 @@ A course supports:
 
 The MVP represents the current operational set of courses.
 
+Course credit hours are treated operationally as static institutional data. The MVP does not add enrollment-based editing restrictions or credit-hour history/versioning.
+
 Semester/history modeling is intentionally deferred to a future version.
 
 ---
@@ -300,6 +308,8 @@ A section has:
 
 - course,
 
+- positive integer section number that is unique within its course,
+
 - responsible Admin/instructor,
 
 - day,
@@ -319,6 +329,8 @@ Valid section times are between:
 08:00 and 20:00.
 
 A section starts and ends on the same day.
+
+Valid section days are Saturday through Thursday. Friday is not valid.
 
 Example valid sections:
 
@@ -368,6 +380,14 @@ Each course may define:
 - switching opening time,
 
 - switching closing time.
+
+Each opening and closing pair must either both be configured or both be null. A null/null window is closed, and a partially configured window is invalid.
+
+Opening is inclusive and closing is exclusive:
+
+opensAt &lt;= now &lt; closesAt
+
+Institutional scheduling and date rendering use the Africa/Cairo timezone.
 
 Registration and switching are separate windows.
 
@@ -822,6 +842,8 @@ Example:
 
 Each assigned Admin receives their own notification.
 
+Recipients are the Admins assigned to the course when the Student removes it. Each recipient receives a separate notification so read/unread state remains independent.
+
 ---
 
 # 30. Admin Course Page
@@ -1130,6 +1152,8 @@ Super Admins can:
 
 - choose primary Admin.
 
+The primary Admin is optional. A course may have zero or one primary Admin.
+
 Course code must be unique.
 
 ---
@@ -1153,6 +1177,10 @@ Initial Admin creation may use:
 - email,
 
 - temporary password.
+
+New Admins must change their temporary password on first login.
+
+Admin accounts are deactivated through an `isActive` state rather than hard-deleted. Inactive Admins cannot authenticate or manage the system, and historical references remain intact.
 
 Advanced invitation/email flows are deferred.
 

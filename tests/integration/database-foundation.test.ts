@@ -8,14 +8,17 @@ import {
 } from "../../src/generated/prisma/client";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
-const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
-describeWithDatabase("PostgreSQL database foundation", () => {
+if (!databaseUrl) {
+  throw new Error("TEST_DATABASE_URL is required for integration tests");
+}
+
+describe("PostgreSQL database foundation", () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
     prisma = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: databaseUrl! }),
+      adapter: new PrismaPg({ connectionString: databaseUrl }),
     });
     await prisma.$connect();
   });
@@ -54,6 +57,57 @@ describeWithDatabase("PostgreSQL database foundation", () => {
           nameEn: "Test Course",
           creditHours: 3,
           registrationOpensAt: new Date(),
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("enforces positive course, section, and time values", async () => {
+    await expect(
+      prisma.course.create({
+        data: {
+          code: `P${randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()}`,
+          nameAr: "مادة اختبار",
+          nameEn: "Test Course",
+          creditHours: 0,
+        },
+      }),
+    ).rejects.toThrow();
+
+    const suffix = randomUUID();
+    const [course, admin] = await Promise.all([
+      prisma.course.create({
+        data: {
+          code: `V${suffix.replaceAll("-", "").slice(0, 8).toUpperCase()}`,
+          nameAr: "مادة اختبار",
+          nameEn: "Test Course",
+          creditHours: 3,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          fullName: "Section Admin",
+          email: `section-admin-${suffix}@example.com`,
+          passwordHash: "not-a-real-password-hash",
+          role: UserRole.ADMIN,
+        },
+      }),
+    ]);
+
+    await prisma.courseAdmin.create({
+      data: { courseId: course.id, adminId: admin.id },
+    });
+
+    await expect(
+      prisma.section.create({
+        data: {
+          courseId: course.id,
+          sectionNumber: 0,
+          responsibleAdminId: admin.id,
+          day: DayOfWeek.MONDAY,
+          startMinute: 420,
+          endMinute: 480,
+          capacity: 0,
         },
       }),
     ).rejects.toThrow();
@@ -251,6 +305,28 @@ describeWithDatabase("PostgreSQL database foundation", () => {
         data: {
           studentId: student.id,
           courseId: secondCourse.id,
+          sectionId: firstSection.id,
+        },
+      }),
+    ).rejects.toThrow();
+
+    const studentWithoutEnrollment = await prisma.user.create({
+      data: {
+        fullName: "Student Without Enrollment",
+        email: `not-enrolled-${suffix}@example.com`,
+        passwordHash: "not-a-real-password-hash",
+        role: UserRole.STUDENT,
+        universityId: `N-${suffix}`,
+        completedCreditHours: 0,
+        isTransferredThisYear: false,
+      },
+    });
+
+    await expect(
+      prisma.sectionRegistration.create({
+        data: {
+          studentId: studentWithoutEnrollment.id,
+          courseId: firstCourse.id,
           sectionId: firstSection.id,
         },
       }),

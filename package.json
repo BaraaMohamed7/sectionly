@@ -14,8 +14,8 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "test": "vitest run",
-    "test:integration": "vitest run tests/integration"
+    "test": "npm run test:integration",
+    "test:integration": "node tests/integration/run.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
