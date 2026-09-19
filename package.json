@@ -14,16 +14,20 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "test": "npm run test:integration",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run tests/unit",
     "test:integration": "node tests/integration/run.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "bcryptjs": "^3.0.3",
     "next": "16.3.5",
+    "next-auth": "^4.24.15",
     "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

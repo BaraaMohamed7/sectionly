@@ -146,7 +146,9 @@ Email must be valid, but a university-domain email is not required.
 
 No email OTP or university verification is required for the MVP.
 
-After account creation, the Student is authenticated automatically and continues directly through onboarding.
+All required Student information is collected before the account is created. After account creation, the Student is authenticated automatically and continues directly to course selection.
+
+The MVP does not implement application-level rate limiting. Login and registration must receive platform-level rate limiting before unrestricted public deployment.
 
 ---
 
@@ -174,7 +176,6 @@ The calculated level is displayed throughout the product where useful.
 Expected flow:
 
 Create Account\
-→ Student Information\
 → Select Courses\
 → Confirm Courses\
 → Dashboard
@@ -1267,7 +1268,10 @@ Desktop:
 Public:
 
 /login\
-/register\
+/register
+
+Authenticated onboarding:
+
 /register/courses\
 /register/confirm
 
