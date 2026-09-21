@@ -1,11 +1,10 @@
 import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import {
-  AuthorizationError,
-  requireStudent,
-} from "@/server/authorization";
+import { AuthorizationError, requireStudent } from "@/server/authorization";
+import { listCoursesForOnboarding } from "@/server/student-courses/service";
+import { CourseSelectionForm } from "./course-selection-form";
 
-export default async function OnboardingCoursesPlaceholderPage() {
+export default async function OnboardingCoursesPage() {
   let student;
 
   try {
@@ -30,17 +29,33 @@ export default async function OnboardingCoursesPlaceholderPage() {
     redirect("/dashboard");
   }
 
+  const courses = await listCoursesForOnboarding();
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-sky-50 px-4 py-10 text-slate-900">
-      <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="mb-2 text-sm font-semibold text-blue-600">Sectionly</p>
-        <h1 className="text-2xl font-bold">Welcome, {student.fullName}</h1>
-        <p className="mt-3 text-slate-600">
-          Your account is ready. Course selection will be added in the next implementation slice.
-        </p>
-        <div className="mt-6">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex min-h-18 w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div>
+            <p className="text-sm font-bold text-blue-600">Sectionly</p>
+            <p className="text-sm text-slate-500">Initial course selection</p>
+          </div>
           <SignOutButton />
         </div>
+      </header>
+      <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+        <div className="mb-7 max-w-2xl">
+          <p className="mb-2 text-sm font-bold tracking-wide text-blue-600 uppercase">
+            Welcome, {student.fullName}
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Select the courses you are taking
+          </h1>
+          <p className="mt-3 leading-7 text-slate-600">
+            Choose up to 19 credit hours. There is no minimum, so you can also
+            continue without selecting a course.
+          </p>
+        </div>
+        <CourseSelectionForm courses={courses} />
       </section>
     </main>
   );

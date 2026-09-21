@@ -1,7 +1,6 @@
 import { Prisma, UserRole } from "@/generated/prisma/client";
 import { db, type DatabaseClient } from "@/server/db";
-import { AUDIT_ACTIONS } from "@/server/super-admin/actions";
-import { writeAuditLog } from "@/server/super-admin/audit";
+import { AUDIT_ACTIONS } from "@/server/audit-actions";
 import { SuperAdminError } from "@/server/super-admin/errors";
 import {
   assertActiveSuperAdmin,
@@ -11,6 +10,7 @@ import {
   lockUsersForShare,
 } from "@/server/super-admin/transactions";
 import { idSchema, parseCourseInput } from "@/server/super-admin/validation";
+import { writeAuditLog } from "@/server/write-audit-log";
 
 const courseSelect = {
   id: true,

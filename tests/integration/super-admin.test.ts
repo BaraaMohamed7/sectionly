@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { UserRole } from "@/generated/prisma/client";
+import { AUDIT_ACTIONS } from "@/server/audit-actions";
 import { verifyPassword } from "@/server/auth/password";
 import { createPrismaClient, db } from "@/server/db";
 import {
@@ -9,7 +10,6 @@ import {
   setAdminActive,
   setAdminRole,
 } from "@/server/super-admin/admin-accounts";
-import { AUDIT_ACTIONS } from "@/server/super-admin/actions";
 import { bootstrapInitialSuperAdmin } from "@/server/super-admin/bootstrap";
 import {
   assignCourseAdmin,

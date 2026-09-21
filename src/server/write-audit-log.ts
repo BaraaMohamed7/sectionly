@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
-import type { AuditAction } from "@/server/super-admin/actions";
+import type { AuditAction } from "@/server/audit-actions";
 
 export async function writeAuditLog(
   transaction: Prisma.TransactionClient,
@@ -7,7 +7,7 @@ export async function writeAuditLog(
     actorId?: string;
     courseId?: string;
     action: AuditAction;
-    entityType: "User" | "Course" | "CourseAdmin";
+    entityType: "User" | "Course" | "CourseAdmin" | "CourseEnrollment";
     entityId?: string;
     metadata?: Prisma.InputJsonObject;
   },

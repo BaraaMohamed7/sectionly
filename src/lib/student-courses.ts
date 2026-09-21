@@ -1,0 +1,1 @@
+export const MAX_SELECTED_CREDIT_HOURS = 19;

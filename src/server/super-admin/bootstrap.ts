@@ -1,12 +1,12 @@
 import { Prisma, UserRole } from "@/generated/prisma/client";
 import { hashPassword } from "@/server/auth/password";
 import { db, type DatabaseClient } from "@/server/db";
-import { AUDIT_ACTIONS } from "@/server/super-admin/actions";
-import { writeAuditLog } from "@/server/super-admin/audit";
+import { AUDIT_ACTIONS } from "@/server/audit-actions";
 import { SuperAdminError } from "@/server/super-admin/errors";
 import { generateTemporaryPassword } from "@/server/super-admin/temporary-password";
 import { acquireActiveSuperAdminLock } from "@/server/super-admin/transactions";
 import { createAdminSchema } from "@/server/super-admin/validation";
+import { writeAuditLog } from "@/server/write-audit-log";
 
 export async function bootstrapInitialSuperAdmin(
   input: unknown,
