@@ -10,7 +10,7 @@ export const passwordSchema = z
     message: "Password must not exceed 72 UTF-8 bytes",
   });
 
-const emailSchema = z
+export const emailSchema = z
   .string()
   .trim()
   .toLowerCase()

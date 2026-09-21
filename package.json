@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "bootstrap:super-admin": "tsx --env-file-if-exists=.env scripts/bootstrap-super-admin.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -22,6 +23,8 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
     "next": "16.3.5",
     "next-auth": "^4.24.15",
     "pg": "^8.23.0",
@@ -40,6 +43,7 @@
     "eslint-config-next": "16.3.5",
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.1"
   }

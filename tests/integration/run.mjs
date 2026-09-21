@@ -27,8 +27,12 @@ run(["exec", "--", "prisma", "migrate", "deploy"], {
   ...process.env,
   DATABASE_URL: testDatabaseUrl,
 });
-run(["exec", "--", "vitest", "run", "tests/integration"], {
-  ...process.env,
-  AUTH_SECRET: process.env.AUTH_SECRET ?? "integration-test-secret-not-for-production",
-  DATABASE_URL: testDatabaseUrl,
-});
+run(
+  ["exec", "--", "vitest", "run", "tests/integration", "--no-file-parallelism"],
+  {
+    ...process.env,
+    AUTH_SECRET:
+      process.env.AUTH_SECRET ?? "integration-test-secret-not-for-production",
+    DATABASE_URL: testDatabaseUrl,
+  },
+);

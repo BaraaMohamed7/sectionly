@@ -1,8 +1,5 @@
 import { UserRole } from "@/generated/prisma/client";
-import {
-  getCurrentUser,
-  type CurrentUser,
-} from "@/server/auth/current-user";
+import { getCurrentUser, type CurrentUser } from "@/server/auth/current-user";
 
 export type AuthorizationErrorCode =
   | "UNAUTHENTICATED"
@@ -22,6 +19,10 @@ export type CurrentStudent = CurrentUser & {
   universityId: string;
   completedCreditHours: number;
   isTransferredThisYear: boolean;
+};
+
+export type CurrentSuperAdmin = CurrentUser & {
+  role: typeof UserRole.SUPER_ADMIN;
 };
 
 export async function requireAuthenticatedUser() {
@@ -60,4 +61,14 @@ export async function requireStudent(): Promise<CurrentStudent> {
   }
 
   return user as CurrentStudent;
+}
+
+export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
+  const user = await requireUser();
+
+  if (user.role !== UserRole.SUPER_ADMIN) {
+    throw new AuthorizationError("FORBIDDEN");
+  }
+
+  return user as CurrentSuperAdmin;
 }

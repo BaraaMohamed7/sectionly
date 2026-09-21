@@ -7,6 +7,7 @@ import {
   AuthorizationError,
   requireAuthenticatedUser,
   requireStudent,
+  requireSuperAdmin,
   requireUser,
 } from "@/server/authorization";
 import { hashPassword } from "@/server/auth/password";
@@ -79,7 +80,9 @@ describe("current-user authorization", () => {
       where: { id: user.id },
       data: { mustChangePassword: true },
     });
-    await expect(requireAuthenticatedUser()).resolves.toMatchObject({ id: user.id });
+    await expect(requireAuthenticatedUser()).resolves.toMatchObject({
+      id: user.id,
+    });
     await expect(requireUser()).rejects.toMatchObject({
       code: "PASSWORD_CHANGE_REQUIRED",
     } satisfies Partial<AuthorizationError>);
@@ -91,5 +94,25 @@ describe("current-user authorization", () => {
     await expect(requireStudent()).rejects.toMatchObject({
       code: "FORBIDDEN",
     } satisfies Partial<AuthorizationError>);
+  });
+
+  it("allows only an active Super Admin without a forced password change", async () => {
+    const user = await createStudent();
+    mockedGetServerSession.mockResolvedValue({
+      user: { id: user.id },
+      expires: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    await expect(requireSuperAdmin()).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    } satisfies Partial<AuthorizationError>);
+
+    await db.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.SUPER_ADMIN },
+    });
+    await expect(requireSuperAdmin()).resolves.toMatchObject({ id: user.id });
+
+    await db.user.delete({ where: { id: user.id } });
   });
 });

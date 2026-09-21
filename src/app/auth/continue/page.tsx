@@ -14,10 +14,13 @@ export default async function AuthenticationContinuationPage() {
   }
 
   if (user.role === UserRole.STUDENT) {
-    redirect(
-      user.onboardingCompletedAt ? "/dashboard" : "/register/courses",
-    );
+    redirect(user.onboardingCompletedAt ? "/dashboard" : "/register/courses");
   }
 
+  if (user.role === UserRole.SUPER_ADMIN) {
+    redirect("/admin");
+  }
+
+  // The regular Admin landing page remains intentionally limited for now.
   redirect("/admin");
 }
