@@ -11,12 +11,6 @@ type CourseFormValues = {
   nameAr?: string;
   nameEn?: string;
   creditHours?: number;
-  registrationOpensAt?: string;
-  registrationClosesAt?: string;
-  switchingOpensAt?: string;
-  switchingClosesAt?: string;
-  registrationPaused?: boolean;
-  switchingPaused?: boolean;
 };
 
 export function CourseForm({ initial = {} }: { initial?: CourseFormValues }) {
@@ -72,66 +66,6 @@ export function CourseForm({ initial = {} }: { initial?: CourseFormValues }) {
           />
         </label>
       </div>
-
-      <fieldset className="admin-window-fieldset">
-        <legend>Registration window · Cairo time</legend>
-        <div className="admin-form-grid">
-          <label>
-            Opens
-            <input
-              name="registrationOpensAt"
-              type="datetime-local"
-              defaultValue={initial.registrationOpensAt}
-            />
-          </label>
-          <label>
-            Closes
-            <input
-              name="registrationClosesAt"
-              type="datetime-local"
-              defaultValue={initial.registrationClosesAt}
-            />
-          </label>
-        </div>
-        <label className="admin-checkbox">
-          <input
-            name="registrationPaused"
-            type="checkbox"
-            defaultChecked={initial.registrationPaused}
-          />
-          Pause registration
-        </label>
-      </fieldset>
-
-      <fieldset className="admin-window-fieldset">
-        <legend>Switching window · Cairo time</legend>
-        <div className="admin-form-grid">
-          <label>
-            Opens
-            <input
-              name="switchingOpensAt"
-              type="datetime-local"
-              defaultValue={initial.switchingOpensAt}
-            />
-          </label>
-          <label>
-            Closes
-            <input
-              name="switchingClosesAt"
-              type="datetime-local"
-              defaultValue={initial.switchingClosesAt}
-            />
-          </label>
-        </div>
-        <label className="admin-checkbox">
-          <input
-            name="switchingPaused"
-            type="checkbox"
-            defaultChecked={initial.switchingPaused}
-          />
-          Pause switching
-        </label>
-      </fieldset>
 
       <button className="admin-button" disabled={pending} type="submit">
         {pending ? "Saving..." : initial.id ? "Save changes" : "Create course"}

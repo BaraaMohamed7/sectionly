@@ -44,13 +44,13 @@ export default async function AdminLayout({
           <SignOutButton />
         </div>
       </header>
-      {user.role === UserRole.SUPER_ADMIN ? (
-        <nav className="admin-nav" aria-label="Super Admin navigation">
-          <Link href="/admin">Overview</Link>
-          <Link href="/admin/courses">Courses</Link>
+      <nav className="admin-nav" aria-label="Admin navigation">
+        <Link href="/admin">Overview</Link>
+        <Link href="/admin/courses">Courses</Link>
+        {user.role === UserRole.SUPER_ADMIN ? (
           <Link href="/admin/admins">Admins</Link>
-        </nav>
-      ) : null}
+        ) : null}
+      </nav>
       <main className="admin-main">{children}</main>
     </div>
   );

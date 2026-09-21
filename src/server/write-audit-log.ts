@@ -7,7 +7,13 @@ export async function writeAuditLog(
     actorId?: string;
     courseId?: string;
     action: AuditAction;
-    entityType: "User" | "Course" | "CourseAdmin" | "CourseEnrollment";
+    entityType:
+      | "User"
+      | "Course"
+      | "CourseAdmin"
+      | "CourseEnrollment"
+      | "Section"
+      | "SectionRegistration";
     entityId?: string;
     metadata?: Prisma.InputJsonObject;
   },

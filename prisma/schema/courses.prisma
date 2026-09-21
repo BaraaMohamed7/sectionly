@@ -9,7 +9,9 @@ model Course {
   switchingOpensAt     DateTime? @db.Timestamptz(3)
   switchingClosesAt    DateTime? @db.Timestamptz(3)
   registrationPaused   Boolean   @default(false)
+  registrationPausedAt DateTime? @db.Timestamptz(3)
   switchingPaused      Boolean   @default(false)
+  switchingPausedAt    DateTime? @db.Timestamptz(3)
   createdAt            DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime  @updatedAt @db.Timestamptz(3)
 

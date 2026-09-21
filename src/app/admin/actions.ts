@@ -13,6 +13,7 @@ import {
 import {
   assignCourseAdmin,
   createCourse,
+  getCourse,
   setPrimaryCourseAdmin,
   unassignCourseAdmin,
   updateCourse,
@@ -90,24 +91,36 @@ export async function saveCourseAction(
   try {
     const actor = await requireSuperAdmin();
     const courseId = formData.get("courseId");
-    const input = {
+    const details = {
       code: formData.get("code"),
       nameAr: formData.get("nameAr"),
       nameEn: formData.get("nameEn"),
       creditHours: formData.get("creditHours"),
-      registrationOpensAt: formData.get("registrationOpensAt"),
-      registrationClosesAt: formData.get("registrationClosesAt"),
-      switchingOpensAt: formData.get("switchingOpensAt"),
-      switchingClosesAt: formData.get("switchingClosesAt"),
-      registrationPaused: formData.get("registrationPaused") === "on",
-      switchingPaused: formData.get("switchingPaused") === "on",
     };
 
     if (typeof courseId === "string" && courseId !== "") {
-      await updateCourse(actor.id, courseId, input);
+      const current = await getCourse(courseId);
+      if (!current) throw new SuperAdminError("COURSE_NOT_FOUND");
+      await updateCourse(actor.id, courseId, {
+        ...details,
+        registrationOpensAt: formatCourseDate(current.registrationOpensAt),
+        registrationClosesAt: formatCourseDate(current.registrationClosesAt),
+        switchingOpensAt: formatCourseDate(current.switchingOpensAt),
+        switchingClosesAt: formatCourseDate(current.switchingClosesAt),
+        registrationPaused: current.registrationPaused,
+        switchingPaused: current.switchingPaused,
+      });
       revalidatePath(`/admin/courses/${courseId}`);
     } else {
-      await createCourse(actor.id, input);
+      await createCourse(actor.id, {
+        ...details,
+        registrationOpensAt: null,
+        registrationClosesAt: null,
+        switchingOpensAt: null,
+        switchingClosesAt: null,
+        registrationPaused: false,
+        switchingPaused: false,
+      });
     }
     revalidatePath("/admin/courses");
     return {
@@ -117,6 +130,21 @@ export async function saveCourseAction(
   } catch (error) {
     return actionError(error);
   }
+}
+
+function formatCourseDate(date: Date | null) {
+  if (!date) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}`;
 }
 
 export async function manageCourseAdminAction(

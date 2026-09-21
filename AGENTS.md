@@ -262,6 +262,8 @@ Each section contains:
 
 - end time,
 
+- required normalized location,
+
 - capacity,
 
 - publication state.
@@ -520,3 +522,85 @@ Handle database transaction failures safely.
 # 16. Capacity Changes
 
 Capacity must be greater than zero.
+
+After section creation, capacity may increase but must never decrease, even if
+the requested value remains above the current registration count.
+
+Enforce this rule server-side. A disabled input or HTML minimum is not enough.
+
+---
+
+# 17. Admin Section Management
+
+ADMIN may manage sections only for courses assigned through CourseAdmin.
+
+SUPER_ADMIN may manage sections in any course.
+
+The responsible Admin selected for a section must have a CourseAdmin assignment
+for that course, including when the responsible user is a SUPER_ADMIN.
+
+New sections start unpublished. Publication is a separate mutation.
+
+Creating or editing a section must preview:
+
+- overlapping sections for the responsible Admin,
+
+- overlapping sections using the same normalized, case-insensitive location,
+
+- schedule conflicts created for currently registered students when time changes.
+
+These are warning-only conflicts. Confirmation may override them, but the server
+must recompute them inside the confirmed mutation.
+
+Section edits use optimistic concurrency. Compare the submitted updatedAt with
+the locked current row and reject stale edits atomically.
+
+---
+
+# 18. Section Deletion and Transfers
+
+Deleting a populated section requires an explicit destructive confirmation.
+
+The Admin may transfer any subset of source registrations to other sections in
+the same course. Registrations left in the source section are deleted.
+CourseEnrollment rows are preserved.
+
+The complete operation must be atomic:
+
+1. authorize and lock the course,
+
+2. lock source and target Section rows in deterministic UUID order,
+
+3. lock affected registrations,
+
+4. revalidate source membership, target course, capacity, and schedule conflicts,
+
+5. transfer selected registrations,
+
+6. remove remaining source registrations,
+
+7. delete the source section,
+
+8. write transfer/deletion AuditLog entries,
+
+9. commit.
+
+Target capacity is a hard failure and cannot be overridden. Schedule conflicts
+are warning-only and may be explicitly confirmed.
+
+---
+
+# 19. Window Pause Semantics
+
+Registration and switching windows are independent.
+
+Pausing records the database/server time in the corresponding pausedAt field.
+Editing dates while paused preserves that original timestamp.
+
+Normal resume clears paused state and preserves closesAt.
+
+Resume plus extend clears paused state and adds the actual elapsed pause duration
+to closesAt, using database/server time.
+
+All successful window edits, pauses, and resumes must be audited. Failed
+mutations must not leave audit rows.

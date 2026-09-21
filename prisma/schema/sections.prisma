@@ -6,6 +6,7 @@ model Section {
   day                DayOfWeek
   startMinute        Int
   endMinute          Int
+  location           String
   capacity           Int
   isPublished        Boolean   @default(false)
   createdAt          DateTime  @default(now()) @db.Timestamptz(3)
@@ -19,6 +20,8 @@ model Section {
   @@unique([id, courseId])
   @@index([courseId, isPublished])
   @@index([courseId, responsibleAdminId])
+  @@index([responsibleAdminId, day])
+  @@index([location, day])
 }
 
 model SectionRegistration {

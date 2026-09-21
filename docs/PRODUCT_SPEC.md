@@ -319,6 +319,8 @@ A section has:
 
 - end time,
 
+- required normalized location,
+
 - capacity,
 
 - publication state.
@@ -403,6 +405,11 @@ Sep 20 20:00 → Sep 27 20:00
 The product automatically determines availability based on server time.
 
 Admins may also temporarily pause registration or switching.
+
+Pausing records the server/database time. Editing a paused window preserves the
+original pause start. Normal resume keeps the configured closing time. Resume
+and extend adds the actual paused duration to the closing time. Registration
+and switching remain independent throughout these operations.
 
 ---
 
@@ -490,6 +497,10 @@ If capacity reaches:
 the section is Full.
 
 The system must never allow registrations beyond capacity, including under simultaneous requests.
+
+After a section is created, capacity may increase but may never decrease. This
+rule is intentionally stricter than comparing capacity with current
+registrations and prevents ambiguous seat-policy changes.
 
 ---
 
@@ -919,11 +930,13 @@ Admins can:
 
 - edit section,
 
-- increase/decrease valid capacity,
+- increase capacity,
 
 - publish,
 
-- unpublish.
+- unpublish,
+
+- delete with an explicit registration transfer/removal plan.
 
 Desktop may use a table.
 
@@ -959,9 +972,11 @@ Fields:
 
 - end time,
 
+- location,
+
 - capacity,
 
-- visible to students / published.
+New sections always start unpublished. Publication is a separate action.
 
 Responsible Admin must be assigned to the course.
 
@@ -984,11 +999,12 @@ Current capacity:\
 30
 
 Admin attempts:\
-25
+29
 
 Reject.
 
-Capacity cannot be lower than current registration count.
+Capacity cannot be decreased after section creation, even when the requested
+value remains above the current registration count.
 
 Admin changes:\
 30 → 35
@@ -1001,17 +1017,19 @@ Five new seats become immediately available.
 
 # 35. Section Deletion
 
-Hard deletion should not be the normal operational action.
+Use Unpublish when the goal is only to prevent new students from selecting a
+section. Unpublishing keeps existing registrations.
 
-If a Section has registrations:
+Admins may explicitly delete an empty or populated section. Before confirmation,
+the UI must show a destructive preview. For a populated section, the Admin may
+group selected students into other sections in the same course. Registrations
+left in the source section are removed, but CourseEnrollment records are always
+preserved.
 
-do not allow simple hard deletion.
-
-Use Unpublish when the goal is preventing new students from selecting it.
-
-A future version may introduce explicit Section Cancellation with its own workflow.
-
-If a section has no registrations, deletion may be supported if implementation remains simple and safe.
+The server must lock source and target sections in deterministic ID order,
+revalidate target capacity and student schedule conflicts, transfer selected
+registrations, remove remaining registrations, delete the section, and write
+audit records in one transaction. Any failure rolls back the complete operation.
 
 ---
 
@@ -1020,6 +1038,16 @@ If a section has no registrations, deletion may be supported if implementation r
 If an Admin changes a section day/time, existing Students may develop conflicts.
 
 Before final save, calculate impact.
+
+Creation and editing also preview operational overlaps across courses:
+
+- the responsible Admin has another overlapping section,
+
+- the normalized location is used by another overlapping section.
+
+These and existing-student schedule conflicts are explicit warnings that an
+Admin may override. The server recomputes warnings in the confirmed mutation;
+the preview is never trusted as authorization or validation.
 
 Example:
 
@@ -1134,6 +1162,9 @@ Switching:
 Changing settings should be audited.
 
 Server-side time is authoritative.
+
+Window edits, pause, normal resume, and resume-with-extension are separate
+audited operations. Pausing an unconfigured window is invalid.
 
 ---
 
@@ -1326,7 +1357,7 @@ The implementation must preserve:
 
  7. Admin cannot manage an unassigned course unless Super Admin.
 
- 8. Capacity cannot be reduced below registered count.
+ 8. Section capacity cannot be decreased after creation.
 
  9. Registration/switching obey server-side windows.
 
@@ -1335,6 +1366,12 @@ The implementation must preserve:
 11. Course removal also removes existing section registration atomically.
 
 12. System always retains at least one Super Admin.
+
+13. Section deletion transfers/removals and audit writes are atomic.
+
+14. Confirmed conflict overrides recompute current conflicts on the server.
+
+15. Concurrent section edits use the expected updatedAt value and reject stale writers.
 
 ---
 

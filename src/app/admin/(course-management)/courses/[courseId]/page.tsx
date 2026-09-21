@@ -1,24 +1,26 @@
 import { notFound } from "next/navigation";
+import { UserRole } from "@/generated/prisma/client";
 import {
   AssignCourseAdminForm,
   CourseAdminControls,
 } from "@/app/admin/_components/course-admin-controls";
 import { CourseForm } from "@/app/admin/_components/course-form";
-import { requireSuperAdmin } from "@/server/authorization";
+import { CourseOperations } from "@/app/admin/_components/course-operations";
+import { requireUser } from "@/server/authorization";
+import { getManageableCourse } from "@/server/course-management/queries";
 import { listAdminAccounts } from "@/server/super-admin/admin-accounts";
-import { getCourse } from "@/server/super-admin/courses";
-import { formatCairoDateTimeInput } from "@/server/timezone";
 
 export default async function CoursePage({
   params,
 }: {
   params: Promise<{ courseId: string }>;
 }) {
-  await requireSuperAdmin();
+  const user = await requireUser();
   const { courseId } = await params;
+  const isSuperAdmin = user.role === UserRole.SUPER_ADMIN;
   const [course, admins] = await Promise.all([
-    getCourse(courseId).catch(() => null),
-    listAdminAccounts(),
+    getManageableCourse(user.id, courseId).catch(() => null),
+    isSuperAdmin ? listAdminAccounts() : Promise.resolve([]),
   ]);
 
   if (!course) {
@@ -38,33 +40,29 @@ export default async function CoursePage({
         <p dir="rtl">{course.nameAr}</p>
       </section>
 
-      <section className="admin-panel">
-        <div className="admin-section-heading">
-          <div>
-            <p className="admin-eyebrow">Course settings</p>
-            <h2>Details and windows</h2>
+      {isSuperAdmin ? (
+        <section className="admin-panel">
+          <div className="admin-section-heading">
+            <div>
+              <p className="admin-eyebrow">Catalog record</p>
+              <h2>Course details</h2>
+            </div>
           </div>
-        </div>
-        <CourseForm
-          initial={{
-            id: course.id,
-            code: course.code,
-            nameAr: course.nameAr,
-            nameEn: course.nameEn,
-            creditHours: course.creditHours,
-            registrationOpensAt: formatOptionalDate(course.registrationOpensAt),
-            registrationClosesAt: formatOptionalDate(
-              course.registrationClosesAt,
-            ),
-            switchingOpensAt: formatOptionalDate(course.switchingOpensAt),
-            switchingClosesAt: formatOptionalDate(course.switchingClosesAt),
-            registrationPaused: course.registrationPaused,
-            switchingPaused: course.switchingPaused,
-          }}
-        />
-      </section>
+          <CourseForm
+            initial={{
+              id: course.id,
+              code: course.code,
+              nameAr: course.nameAr,
+              nameEn: course.nameEn,
+              creditHours: course.creditHours,
+            }}
+          />
+        </section>
+      ) : null}
 
-      <section className="admin-panel">
+      <CourseOperations course={course} />
+
+      {isSuperAdmin ? <section className="admin-panel">
         <div className="admin-section-heading">
           <div>
             <p className="admin-eyebrow">Course access</p>
@@ -105,11 +103,7 @@ export default async function CoursePage({
             <p className="admin-empty-state">No Admins assigned yet.</p>
           ) : null}
         </div>
-      </section>
+      </section> : null}
     </div>
   );
-}
-
-function formatOptionalDate(date: Date | null) {
-  return date ? formatCairoDateTimeInput(date) : "";
 }

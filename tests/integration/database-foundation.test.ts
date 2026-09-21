@@ -107,7 +107,23 @@ describe("PostgreSQL database foundation", () => {
           day: DayOfWeek.MONDAY,
           startMinute: 420,
           endMinute: 480,
+          location: "Room 1",
           capacity: 0,
+        },
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.section.create({
+        data: {
+          courseId: course.id,
+          sectionNumber: 1,
+          responsibleAdminId: admin.id,
+          day: DayOfWeek.MONDAY,
+          startMinute: 480,
+          endMinute: 540,
+          location: "  Lab   3  ",
+          capacity: 20,
         },
       }),
     ).rejects.toThrow();
@@ -230,6 +246,7 @@ describe("PostgreSQL database foundation", () => {
           day: DayOfWeek.SATURDAY,
           startMinute: 480,
           endMinute: 600,
+          location: "Room 2",
           capacity: 30,
         },
       }),
@@ -296,6 +313,7 @@ describe("PostgreSQL database foundation", () => {
         day: DayOfWeek.SUNDAY,
         startMinute: 600,
         endMinute: 720,
+        location: "Room 3",
         capacity: 30,
       },
     });

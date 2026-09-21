@@ -205,6 +205,7 @@ describe("student course selection", () => {
         day: DayOfWeek.SATURDAY,
         startMinute: 480,
         endMinute: 540,
+        location: "Room 1",
         capacity: 10,
       },
     });

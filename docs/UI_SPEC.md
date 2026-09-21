@@ -1281,6 +1281,12 @@ Publish/Unpublish as applicable.
 
 Delete only when allowed.
 
+Deletion is always a destructive preview-and-confirm workflow. A populated
+section lists each registered student with an optional target section. The
+preview groups incoming counts by target, identifies registrations that will be
+removed, and shows any resulting student schedule conflicts. Confirmation must
+state that course selections are preserved.
+
 No hover-only actions.
 
 ---
@@ -1295,8 +1301,11 @@ Responsible Admin\
 Day\
 Start Time\
 End Time\
+Location\
 Capacity\
-Visible to Students
+
+New sections start unpublished. Publishing is a separate action on the section
+card.
 
 Actions:
 
@@ -1324,7 +1333,10 @@ If Admin attempts 25:
 
 inline error:
 
-"Capacity cannot be lower than the 28 students currently registered."
+"Section capacity cannot be decreased after creation."
+
+The same error applies even if the requested capacity remains above the current
+registration count.
 
 ---
 
@@ -1341,6 +1353,10 @@ No conflict:
 Proceed with Save.
 
 Do not show unnecessary warning UI when there are no affected Students.
+
+The same preview surface also reports overlapping sections for the responsible
+Admin and for the normalized location. Conflict groups identify the other
+course, section, day/time, Admin, or room so the override is informed.
 
 ---
 
@@ -1502,6 +1518,15 @@ Current status
 
 Pause/Resume Registration
 
+When paused, offer distinct actions:
+
+Resume\
+Resume + Extend
+
+Resume preserves the original close time. Resume + Extend adds the actual pause
+duration measured by the server. Editing dates while paused must not reset the
+displayed pause start.
+
 Section:
 
 Switching Window
@@ -1511,6 +1536,9 @@ Closes\
 Current status
 
 Pause/Resume Switching
+
+Switching uses the same independent pause/resume behavior; changing one window
+must not imply a change to the other.
 
 Use clear distinction between:
 
@@ -1732,7 +1760,7 @@ Not:
 
 Admin should see:
 
-"Capacity cannot be lower than the 28 students currently registered."
+"Section capacity cannot be decreased after creation."
 
 Not:
 
