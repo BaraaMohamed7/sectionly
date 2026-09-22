@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { DayOfWeek } from "@/generated/prisma/client";
 import {
   deleteSectionAction,
@@ -271,12 +271,31 @@ function DeleteSectionForm({ course, section }: { course: Course; section: Secti
     deleteSectionAction,
     INITIAL_COURSE_MANAGEMENT_STATE,
   );
+  const [transferSelections, setTransferSelections] = useState<
+    Record<string, string>
+  >({});
   const targets = course.sections.filter((candidate) => candidate.id !== section.id);
+  const selectedTransfers = Object.entries(transferSelections)
+    .filter((entry): entry is [string, string] => entry[1] !== "")
+    .map(([studentId, targetSectionId]) => ({ studentId, targetSectionId }));
+  const previewMatchesSelection = Boolean(
+    state.deletionPlan &&
+      transferPlanKey(state.deletionPlan.transfers) ===
+        transferPlanKey(selectedTransfers),
+  );
+  const activePlan = previewMatchesSelection ? state.deletionPlan : undefined;
 
   return (
     <form action={action} className="admin-form admin-delete-form">
       <input type="hidden" name="courseId" value={course.id} />
       <input type="hidden" name="sectionId" value={section.id} />
+      {activePlan ? (
+        <input
+          type="hidden"
+          name="reviewedStateToken"
+          value={activePlan.reviewedStateToken}
+        />
+      ) : null}
       <p className="admin-destructive-note">
         Deleting removes registrations left here, but never removes a student’s
         course selection. Optionally transfer students first.
@@ -285,7 +304,16 @@ function DeleteSectionForm({ course, section }: { course: Course; section: Secti
         <label key={registration.studentId}>
           {registration.enrollment.student.fullName}
           <input type="hidden" name="studentId" value={registration.studentId} />
-          <select name={`transfer-${registration.studentId}`} defaultValue="">
+          <select
+            name={`transfer-${registration.studentId}`}
+            value={transferSelections[registration.studentId] ?? ""}
+            onChange={(event) =>
+              setTransferSelections((current) => ({
+                ...current,
+                [registration.studentId]: event.target.value,
+              }))
+            }
+          >
             <option value="">Remove section registration</option>
             {targets.map((target) => (
               <option value={target.id} key={target.id}>
@@ -296,28 +324,49 @@ function DeleteSectionForm({ course, section }: { course: Course; section: Secti
           </select>
         </label>
       ))}
-      {state.deletionPlan ? (
+      {state.deletionPlan && !previewMatchesSelection ? (
+        <p className="admin-action-result admin-action-result-warning" role="status">
+          Transfer selections changed. Preview the updated plan before deletion.
+        </p>
+      ) : null}
+      {activePlan ? (
         <div className="admin-confirmation-panel">
           <strong>Destructive confirmation</strong>
           <p>
-            {state.deletionPlan.transferCount} transfers; {state.deletionPlan.removalCount}{" "}
+            {activePlan.transferCount} transfers; {activePlan.removalCount}{" "}
             registrations removed.
           </p>
-          {state.deletionPlan.targetCounts.map((target) => (
+          {activePlan.transfers.map((transfer) => (
+            <span key={transfer.studentId}>
+              {section.registrations.find(
+                (registration) => registration.studentId === transfer.studentId,
+              )?.enrollment.student.fullName ?? transfer.studentId}{" "}
+              → section {course.sections.find(
+                (item) => item.id === transfer.targetSectionId,
+              )?.sectionNumber}
+            </span>
+          ))}
+          {activePlan.removals.map((removal) => (
+            <span key={removal.studentId}>
+              {removal.studentName} → remove section registration
+            </span>
+          ))}
+          {activePlan.targetCounts.map((target) => (
             <span key={target.targetSectionId}>
-              Section {course.sections.find((item) => item.id === target.targetSectionId)?.sectionNumber}:{" "}
-              {target.transferCount} incoming
+              Section {target.sectionNumber}: {target.currentRegistrationCount} current +{" "}
+              {target.transferCount} incoming = {target.projectedRegistrationCount}/
+              {target.capacity}
             </span>
           ))}
         </div>
       ) : null}
       <ConflictWarnings
         warnings={
-          state.deletionPlan
+          activePlan
             ? {
                 responsibleAdminConflicts: [],
                 locationConflicts: [],
-                studentConflicts: state.deletionPlan.studentConflicts,
+                studentConflicts: activePlan.studentConflicts,
               }
             : state.warnings
         }
@@ -332,7 +381,7 @@ function DeleteSectionForm({ course, section }: { course: Course; section: Secti
         >
           Preview deletion
         </button>
-        {state.deletionPlan ? (
+        {activePlan ? (
           <button
             className="admin-button admin-button-danger"
             disabled={pending}
@@ -546,4 +595,16 @@ function formatCairoInput(date: Date | null) {
   }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}T${value.hour}:${value.minute}`;
+}
+
+function transferPlanKey(
+  transfers: Array<{ studentId: string; targetSectionId: string }>,
+) {
+  return JSON.stringify(
+    [...transfers].sort((first, second) =>
+      `${first.studentId}:${first.targetSectionId}`.localeCompare(
+        `${second.studentId}:${second.targetSectionId}`,
+      ),
+    ),
+  );
 }

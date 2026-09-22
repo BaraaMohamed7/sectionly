@@ -1287,6 +1287,11 @@ preview groups incoming counts by target, identifies registrations that will be
 removed, and shows any resulting student schedule conflicts. Confirmation must
 state that course selections are preserved.
 
+Changing any transfer selection invalidates the displayed confirmation and
+requires Preview deletion again. If server-side membership, target totals, or
+schedule warnings change before confirmation, replace the old confirmation with
+the fresh preview and require another explicit confirmation.
+
 No hover-only actions.
 
 ---

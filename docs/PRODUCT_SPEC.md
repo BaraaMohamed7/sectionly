@@ -1026,6 +1026,11 @@ group selected students into other sections in the same course. Registrations
 left in the source section are removed, but CourseEnrollment records are always
 preserved.
 
+The server issues an opaque reviewed-state token for the exact transfers,
+removals, target totals, and schedule warnings in that preview. Changing a
+selection invalidates the preview. Final confirmation recomputes the state after
+locking; any difference returns a fresh preview and performs no writes.
+
 The server must lock source and target sections in deterministic ID order,
 revalidate target capacity and student schedule conflicts, transfer selected
 registrations, remove remaining registrations, delete the section, and write

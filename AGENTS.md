@@ -561,6 +561,10 @@ the locked current row and reject stale edits atomically.
 
 Deleting a populated section requires an explicit destructive confirmation.
 
+The preview must return a deterministic server-verifiable token that binds the
+exact transfers, removals, target occupancy/capacity totals, and schedule
+warnings shown to the Admin. A generic confirmation boolean is insufficient.
+
 The Admin may transfer any subset of source registrations to other sections in
 the same course. Registrations left in the source section are deleted.
 CourseEnrollment rows are preserved.
@@ -575,18 +579,22 @@ The complete operation must be atomic:
 
 4. revalidate source membership, target course, capacity, and schedule conflicts,
 
-5. transfer selected registrations,
+5. compare the freshly recomputed deletion state with the reviewed-state token,
 
-6. remove remaining source registrations,
+6. transfer selected registrations,
 
-7. delete the source section,
+7. remove remaining source registrations,
 
-8. write transfer/deletion AuditLog entries,
+8. delete the source section,
 
-9. commit.
+9. write transfer/deletion AuditLog entries,
+
+10. commit.
 
 Target capacity is a hard failure and cannot be overridden. Schedule conflicts
-are warning-only and may be explicitly confirmed.
+are warning-only and may be explicitly confirmed. If the locked recomputation
+differs from the reviewed state, roll back without writes and return a fresh
+preview for another explicit confirmation.
 
 ---
 

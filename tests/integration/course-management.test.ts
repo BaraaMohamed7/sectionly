@@ -277,7 +277,19 @@ describe("course section management", () => {
       location: "Room 6",
       capacity: 30,
     });
-    await confirmDeleteSection(actor.id, course.id, empty.id, []);
+    const emptyPreview = await previewSectionDeletion(
+      actor.id,
+      course.id,
+      empty.id,
+      [],
+    );
+    await confirmDeleteSection(
+      actor.id,
+      course.id,
+      empty.id,
+      [],
+      emptyPreview.reviewedStateToken,
+    );
     await expect(db.section.findUnique({ where: { id: empty.id } })).resolves.toBeNull();
 
     const populated = await createDirectSection(course.id, responsible.id, {
@@ -290,7 +302,19 @@ describe("course section management", () => {
     });
     const student = await createStudent();
     await enrollAndRegister(student.id, course.id, populated.id);
-    await confirmDeleteSection(actor.id, course.id, populated.id, []);
+    const populatedPreview = await previewSectionDeletion(
+      actor.id,
+      course.id,
+      populated.id,
+      [],
+    );
+    await confirmDeleteSection(
+      actor.id,
+      course.id,
+      populated.id,
+      [],
+      populatedPreview.reviewedStateToken,
+    );
 
     await expect(
       db.sectionRegistration.findFirst({ where: { studentId: student.id } }),
@@ -335,7 +359,13 @@ describe("course section management", () => {
       transfers,
     );
     expect(preview).toMatchObject({ transferCount: 2, removalCount: 1 });
-    await confirmDeleteSection(actor.id, course.id, source.id, transfers);
+    await confirmDeleteSection(
+      actor.id,
+      course.id,
+      source.id,
+      transfers,
+      preview.reviewedStateToken,
+    );
 
     await expect(registrationSection(students[0]!.id, course.id)).resolves.toBe(
       firstTarget.id,
@@ -363,7 +393,13 @@ describe("course section management", () => {
     }));
 
     await expect(
-      confirmDeleteSection(actor.id, course.id, source.id, transfers),
+      confirmDeleteSection(
+        actor.id,
+        course.id,
+        source.id,
+        transfers,
+        "unreviewed",
+      ),
     ).rejects.toMatchObject({
       code: "TARGET_SECTION_FULL",
     } satisfies Partial<CourseManagementError>);
@@ -413,9 +449,162 @@ describe("course section management", () => {
       course.id,
       source.id,
       transfers,
+      preview.reviewedStateToken,
     );
     expect(result.warnings.studentConflicts).toHaveLength(1);
     await expect(registrationSection(student.id, course.id)).resolves.toBe(target.id);
+  });
+
+  it("does not authorize a changed transfer plan with an older preview", async () => {
+    const { actor, responsible, course } = await managementContext();
+    const source = await createDirectSection(
+      course.id,
+      responsible.id,
+      sectionData(1, 480),
+    );
+    const firstTarget = await createDirectSection(
+      course.id,
+      responsible.id,
+      sectionData(2, 600),
+    );
+    const secondTarget = await createDirectSection(
+      course.id,
+      responsible.id,
+      sectionData(3, 720),
+    );
+    const student = await createStudent();
+    await enrollAndRegister(student.id, course.id, source.id);
+    const firstPlan = [
+      { studentId: student.id, targetSectionId: firstTarget.id },
+    ];
+    const changedPlan = [
+      { studentId: student.id, targetSectionId: secondTarget.id },
+    ];
+
+    const preview = await previewSectionDeletion(
+      actor.id,
+      course.id,
+      source.id,
+      firstPlan,
+    );
+
+    await expect(
+      confirmDeleteSection(
+        actor.id,
+        course.id,
+        source.id,
+        changedPlan,
+        preview.reviewedStateToken,
+      ),
+    ).rejects.toMatchObject({
+      code: "DELETION_CONFIRMATION_REQUIRED",
+      details: {
+        transfers: changedPlan,
+      },
+    });
+    await expect(db.section.findUnique({ where: { id: source.id } })).resolves.not
+      .toBeNull();
+    await expect(registrationSection(student.id, course.id)).resolves.toBe(source.id);
+    await expect(
+      db.auditLog.findFirst({
+        where: { entityId: source.id, action: AUDIT_ACTIONS.SECTION_DELETED },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("requires a fresh preview when a new schedule conflict appears", async () => {
+    const actor = await createUser(UserRole.SUPER_ADMIN);
+    const responsible = await createUser(UserRole.ADMIN);
+    const course = await createCourse();
+    const otherCourse = await createCourse();
+    await assignAdmin(course.id, responsible.id);
+    await assignAdmin(otherCourse.id, responsible.id);
+    const source = await createDirectSection(
+      course.id,
+      responsible.id,
+      sectionData(1, 480),
+    );
+    const target = await createDirectSection(course.id, responsible.id, {
+      ...sectionData(2, 600),
+      day: DayOfWeek.WEDNESDAY,
+    });
+    const student = await createStudent();
+    await enrollAndRegister(student.id, course.id, source.id);
+    const transfers = [{ studentId: student.id, targetSectionId: target.id }];
+    const preview = await previewSectionDeletion(
+      actor.id,
+      course.id,
+      source.id,
+      transfers,
+    );
+    expect(preview.studentConflicts).toHaveLength(0);
+
+    const conflict = await createDirectSection(otherCourse.id, responsible.id, {
+      ...sectionData(1, 630),
+      day: DayOfWeek.WEDNESDAY,
+    });
+    await enrollAndRegister(student.id, otherCourse.id, conflict.id);
+
+    await expect(
+      confirmDeleteSection(
+        actor.id,
+        course.id,
+        source.id,
+        transfers,
+        preview.reviewedStateToken,
+      ),
+    ).rejects.toMatchObject({
+      code: "DELETION_CONFIRMATION_REQUIRED",
+      details: { studentConflicts: [{ studentId: student.id }] },
+    });
+    await expect(registrationSection(student.id, course.id)).resolves.toBe(source.id);
+  });
+
+  it("fails atomically when a target fills after deletion preview", async () => {
+    const { actor, responsible, course } = await managementContext();
+    const source = await createDirectSection(
+      course.id,
+      responsible.id,
+      sectionData(1, 480),
+    );
+    const target = await createDirectSection(course.id, responsible.id, {
+      ...sectionData(2, 600),
+      capacity: 1,
+    });
+    const transferringStudent = await createStudent();
+    await enrollAndRegister(transferringStudent.id, course.id, source.id);
+    const transfers = [
+      { studentId: transferringStudent.id, targetSectionId: target.id },
+    ];
+    const preview = await previewSectionDeletion(
+      actor.id,
+      course.id,
+      source.id,
+      transfers,
+    );
+
+    const occupyingStudent = await createStudent();
+    await enrollAndRegister(occupyingStudent.id, course.id, target.id);
+
+    await expect(
+      confirmDeleteSection(
+        actor.id,
+        course.id,
+        source.id,
+        transfers,
+        preview.reviewedStateToken,
+      ),
+    ).rejects.toMatchObject({ code: "TARGET_SECTION_FULL" });
+    await expect(db.section.findUnique({ where: { id: source.id } })).resolves.not
+      .toBeNull();
+    await expect(
+      db.sectionRegistration.count({ where: { sectionId: source.id } }),
+    ).resolves.toBe(1);
+    await expect(
+      db.auditLog.findFirst({
+        where: { entityId: source.id, action: AUDIT_ACTIONS.SECTION_DELETED },
+      }),
+    ).resolves.toBeNull();
   });
 
   it("rejects stale concurrent section edits atomically", async () => {
@@ -471,20 +660,42 @@ describe("course section management", () => {
     const secondStudent = await createStudent();
     await enrollAndRegister(firstStudent.id, course.id, firstSource.id);
     await enrollAndRegister(secondStudent.id, course.id, secondSource.id);
+    const firstTransfers = [
+      { studentId: firstStudent.id, targetSectionId: target.id },
+    ];
+    const secondTransfers = [
+      { studentId: secondStudent.id, targetSectionId: target.id },
+    ];
+    const [firstPreview, secondPreview] = await Promise.all([
+      previewSectionDeletion(
+        actor.id,
+        course.id,
+        firstSource.id,
+        firstTransfers,
+      ),
+      previewSectionDeletion(
+        actor.id,
+        course.id,
+        secondSource.id,
+        secondTransfers,
+      ),
+    ]);
 
     const results = await Promise.allSettled([
       confirmDeleteSection(
         actor.id,
         course.id,
         firstSource.id,
-        [{ studentId: firstStudent.id, targetSectionId: target.id }],
+        firstTransfers,
+        firstPreview.reviewedStateToken,
         firstClient,
       ),
       confirmDeleteSection(
         actor.id,
         course.id,
         secondSource.id,
-        [{ studentId: secondStudent.id, targetSectionId: target.id }],
+        secondTransfers,
+        secondPreview.reviewedStateToken,
         secondClient,
       ),
     ]);

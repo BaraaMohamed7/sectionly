@@ -9,6 +9,11 @@ import {
   hasConflictWarnings,
   type ConflictPreview,
 } from "@/server/course-management/conflicts";
+import {
+  createDeletionReviewToken,
+  deletionReviewTokenMatches,
+  type DeletionReviewState,
+} from "@/server/course-management/deletion-review";
 import { CourseManagementError } from "@/server/course-management/errors";
 import {
   parseExpectedUpdatedAt,
@@ -39,6 +44,7 @@ type DeletionSection = Pick<
   LockedSection,
   | "id"
   | "courseId"
+  | "sectionNumber"
   | "day"
   | "startMinute"
   | "endMinute"
@@ -340,6 +346,7 @@ export async function previewSectionDeletion(
       sourceSection,
       targets,
       transfers,
+      actor,
     );
   });
 }
@@ -349,12 +356,15 @@ export async function confirmDeleteSection(
   courseId: string,
   sectionId: string,
   inputTransfers: unknown,
+  inputReviewedStateToken: unknown,
   database: DatabaseClient = db,
 ) {
   const actor = uuidSchema.parse(actorId);
   const course = uuidSchema.parse(courseId);
   const source = uuidSchema.parse(sectionId);
   const transfers = parseTransfers(inputTransfers);
+  const reviewedStateToken =
+    typeof inputReviewedStateToken === "string" ? inputReviewedStateToken : "";
   const targetIds = [...new Set(transfers.map((item) => item.targetSectionId))];
 
   return database.$transaction(async (transaction) => {
@@ -371,7 +381,16 @@ export async function confirmDeleteSection(
       sourceSection,
       targets,
       transfers,
+      actor,
     );
+    if (
+      !deletionReviewTokenMatches(
+        deletionReviewState(actor, sourceSection, plan),
+        reviewedStateToken,
+      )
+    ) {
+      throw new CourseManagementError("DELETION_CONFIRMATION_REQUIRED", plan);
+    }
 
     for (const transfer of transfers) {
       await transaction.sectionRegistration.update({
@@ -454,8 +473,17 @@ async function buildDeletionPlan(
   source: DeletionSection,
   targetSections: DeletionSection[],
   transfers: StudentTransfer[],
+  actorId: string,
 ) {
-  const targetIds = [...new Set(transfers.map((item) => item.targetSectionId))];
+  const normalizedTransfers = [...transfers].sort((first, second) =>
+    compareIds(
+      `${first.studentId}:${first.targetSectionId}`,
+      `${second.studentId}:${second.targetSectionId}`,
+    ),
+  );
+  const targetIds = [
+    ...new Set(normalizedTransfers.map((item) => item.targetSectionId)),
+  ].sort(compareIds);
   if (targetIds.includes(source.id)) {
     throw new CourseManagementError("INVALID_TRANSFER_TARGET");
   }
@@ -471,43 +499,103 @@ async function buildDeletionPlan(
 
   const sourceRegistrations = await transaction.sectionRegistration.findMany({
     where: { sectionId: source.id },
-    select: { studentId: true },
+    select: {
+      studentId: true,
+      enrollment: {
+        select: {
+          student: { select: { fullName: true, universityId: true } },
+        },
+      },
+    },
+    orderBy: { studentId: "asc" },
   });
   const sourceStudents = new Set(
     sourceRegistrations.map((registration) => registration.studentId),
   );
-  if (transfers.some((transfer) => !sourceStudents.has(transfer.studentId))) {
+  if (
+    normalizedTransfers.some(
+      (transfer) => !sourceStudents.has(transfer.studentId),
+    )
+  ) {
     throw new CourseManagementError("TRANSFER_STUDENT_NOT_IN_SOURCE");
   }
+  const transferredStudents = new Set(
+    normalizedTransfers.map((transfer) => transfer.studentId),
+  );
+  const removals = sourceRegistrations
+    .filter((registration) => !transferredStudents.has(registration.studentId))
+    .map((registration) => ({
+      studentId: registration.studentId,
+      studentName: registration.enrollment.student.fullName,
+      universityId: registration.enrollment.student.universityId,
+    }));
 
-  const targetCounts = targetIds.map((targetSectionId) => ({
-    targetSectionId,
-    transferCount: transfers.filter(
+  const targetCounts: Array<
+    DeletionReviewState["targetCounts"][number] & { sectionNumber: number }
+  > = [];
+  for (const targetSectionId of targetIds) {
+    const transferCount = normalizedTransfers.filter(
       (transfer) => transfer.targetSectionId === targetSectionId,
-    ).length,
-  }));
-  for (const targetCount of targetCounts) {
-    const currentCount = await transaction.sectionRegistration.count({
-      where: { sectionId: targetCount.targetSectionId },
+    ).length;
+    const currentRegistrationCount = await transaction.sectionRegistration.count({
+      where: { sectionId: targetSectionId },
     });
-    const target = targetById.get(targetCount.targetSectionId)!;
-    if (currentCount + targetCount.transferCount > target.capacity) {
+    const target = targetById.get(targetSectionId)!;
+    const projectedRegistrationCount = currentRegistrationCount + transferCount;
+    if (projectedRegistrationCount > target.capacity) {
       throw new CourseManagementError("TARGET_SECTION_FULL");
     }
+    targetCounts.push({
+      targetSectionId,
+      sectionNumber: target.sectionNumber,
+      transferCount,
+      currentRegistrationCount,
+      projectedRegistrationCount,
+      capacity: target.capacity,
+    });
   }
 
   const studentConflicts = await findStudentTransferConflicts(
     transaction,
     source.id,
-    transfers,
+    normalizedTransfers,
     targetById,
   );
 
-  return {
-    transferCount: transfers.length,
-    removalCount: sourceRegistrations.length - transfers.length,
+  const plan = {
+    transfers: normalizedTransfers,
+    removals,
+    transferCount: normalizedTransfers.length,
+    removalCount: removals.length,
     targetCounts,
     studentConflicts,
+  };
+  return {
+    ...plan,
+    reviewedStateToken: createDeletionReviewToken(
+      deletionReviewState(actorId, source, plan),
+    ),
+  };
+}
+
+function deletionReviewState(
+  actorId: string,
+  source: DeletionSection,
+  plan: {
+    transfers: StudentTransfer[];
+    removals: DeletionReviewState["removals"];
+    targetCounts: DeletionReviewState["targetCounts"];
+    studentConflicts: ConflictPreview["studentConflicts"];
+  },
+): DeletionReviewState {
+  return {
+    actorId,
+    courseId: source.courseId,
+    sourceSectionId: source.id,
+    transfers: plan.transfers,
+    removals: plan.removals,
+    targetCounts: plan.targetCounts,
+    studentConflicts: plan.studentConflicts,
   };
 }
 
@@ -595,4 +683,8 @@ function isPrismaError(error: unknown, code: string) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
   );
+}
+
+function compareIds(first: string, second: string) {
+  return first < second ? -1 : first > second ? 1 : 0;
 }

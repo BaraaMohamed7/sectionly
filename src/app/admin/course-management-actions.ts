@@ -27,12 +27,7 @@ export type CourseManagementActionState = {
   status: "idle" | "success" | "warning" | "error";
   message?: string;
   warnings?: ConflictPreview;
-  deletionPlan?: {
-    transferCount: number;
-    removalCount: number;
-    targetCounts: Array<{ targetSectionId: string; transferCount: number }>;
-    studentConflicts: ConflictPreview["studentConflicts"];
-  };
+  deletionPlan?: Awaited<ReturnType<typeof previewSectionDeletion>>;
 };
 
 export const INITIAL_COURSE_MANAGEMENT_STATE: CourseManagementActionState = {
@@ -153,6 +148,7 @@ export async function deleteSectionAction(
       courseId,
       sectionId,
       transfers,
+      formValue(formData, "reviewedStateToken"),
     );
     revalidateCourse(courseId);
     return {
@@ -225,6 +221,16 @@ function actionError(error: unknown): CourseManagementActionState {
     };
   }
   if (error instanceof CourseManagementError) {
+    if (error.code === "DELETION_CONFIRMATION_REQUIRED") {
+      return {
+        status: "warning",
+        message:
+          "The deletion plan or its warnings changed. Review this fresh preview before confirming again.",
+        deletionPlan: error.details as Awaited<
+          ReturnType<typeof previewSectionDeletion>
+        >,
+      };
+    }
     if (error.code === "CONFLICT_CONFIRMATION_REQUIRED") {
       return {
         status: "warning",
@@ -259,6 +265,8 @@ function managementErrorMessage(code: CourseManagementErrorCode) {
       "The transfer list contains a student who is no longer in this section.",
     TARGET_SECTION_FULL:
       "A target section no longer has enough seats. No changes were made.",
+    DELETION_CONFIRMATION_REQUIRED:
+      "The deletion state changed. Preview it again before confirming.",
     WINDOW_NOT_CONFIGURED: "Set both window dates before pausing or resuming.",
     WINDOW_ALREADY_PAUSED: "This window is already paused.",
     WINDOW_NOT_PAUSED: "This window is not currently paused.",
