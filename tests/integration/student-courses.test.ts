@@ -28,15 +28,18 @@ describe("student course selection", () => {
       second.id,
     ]);
 
-    expect(result).toMatchObject({ courseCount: 2, totalCreditHours: 7 });
-    await expect(enrollmentIds(student.id)).resolves.toEqual(
+    expect(result).toMatchObject({
+      selectedCourseCount: 2,
+      totalCreditHours: 7,
+    });
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual(
       [first.id, second.id].sort(),
     );
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeInstanceOf(
-      Date,
-    );
     await expect(
-      auditActions(student.id, AUDIT_ACTIONS.STUDENT_ONBOARDING_COMPLETED),
+      auditActions(
+        student.id,
+        AUDIT_ACTIONS.STUDENT_INITIAL_COURSE_SELECTION_SAVED,
+      ),
     ).resolves.toHaveLength(1);
   });
 
@@ -46,13 +49,10 @@ describe("student course selection", () => {
     await expect(
       completeStudentOnboarding(student.id, []),
     ).resolves.toMatchObject({
-      courseCount: 0,
+      selectedCourseCount: 0,
       totalCreditHours: 0,
     });
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeInstanceOf(
-      Date,
-    );
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([]);
   });
 
   it("rejects more than 19 credit hours atomically", async () => {
@@ -65,10 +65,12 @@ describe("student course selection", () => {
     ).rejects.toMatchObject({
       code: "CREDIT_HOUR_LIMIT_EXCEEDED",
     } satisfies Partial<StudentCourseError>);
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeNull();
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([]);
     await expect(
-      auditActions(student.id, AUDIT_ACTIONS.STUDENT_ONBOARDING_COMPLETED),
+      auditActions(
+        student.id,
+        AUDIT_ACTIONS.STUDENT_INITIAL_COURSE_SELECTION_SAVED,
+      ),
     ).resolves.toEqual([]);
   });
 
@@ -81,8 +83,7 @@ describe("student course selection", () => {
     ).rejects.toMatchObject({
       code: "COURSE_NOT_FOUND",
     } satisfies Partial<StudentCourseError>);
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeNull();
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([]);
   });
 
   it("deduplicates submitted IDs before totaling or inserting", async () => {
@@ -95,11 +96,11 @@ describe("student course selection", () => {
         course.id.toUpperCase(),
         ` ${course.id} `,
       ]),
-    ).resolves.toMatchObject({ courseCount: 1, totalCreditHours: 10 });
-    await expect(enrollmentIds(student.id)).resolves.toEqual([course.id]);
+    ).resolves.toMatchObject({ selectedCourseCount: 1, totalCreditHours: 10 });
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([course.id]);
   });
 
-  it("sets onboarding completion only after a successful confirmation", async () => {
+  it("allows a valid selection after a failed initial selection", async () => {
     const student = await createStudent();
     const tooLarge = await createCourse(20);
     const valid = await createCourse(3);
@@ -107,25 +108,19 @@ describe("student course selection", () => {
     await expect(
       completeStudentOnboarding(student.id, [tooLarge.id]),
     ).rejects.toMatchObject({ code: "CREDIT_HOUR_LIMIT_EXCEEDED" });
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeNull();
-
     await completeStudentOnboarding(student.id, [valid.id]);
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeInstanceOf(
-      Date,
-    );
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([valid.id]);
   });
 
-  it("cannot confirm onboarding twice", async () => {
+  it("allows repeated initial selection without duplicating enrollments", async () => {
     const student = await createStudent();
     const course = await createCourse(3);
     await completeStudentOnboarding(student.id, []);
 
     await expect(
       completeStudentOnboarding(student.id, [course.id]),
-    ).rejects.toMatchObject({
-      code: "ONBOARDING_ALREADY_COMPLETED",
-    } satisfies Partial<StudentCourseError>);
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
+    ).resolves.toMatchObject({ addedCourseCount: 1, selectedCourseCount: 1 });
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([course.id]);
   });
 
   it("adds a course when the resulting total is at most 19", async () => {
@@ -139,7 +134,7 @@ describe("student course selection", () => {
     ).resolves.toMatchObject({
       totalCreditHours: 19,
     });
-    await expect(enrollmentIds(student.id)).resolves.toEqual(
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual(
       [existing.id, target.id].sort(),
     );
   });
@@ -155,7 +150,7 @@ describe("student course selection", () => {
         code: "CREDIT_HOUR_LIMIT_EXCEEDED",
       } satisfies Partial<StudentCourseError>,
     );
-    await expect(enrollmentIds(student.id)).resolves.toEqual([existing.id]);
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([existing.id]);
     await expect(
       db.auditLog.findFirst({
         where: {
@@ -167,17 +162,14 @@ describe("student course selection", () => {
     ).resolves.toBeNull();
   });
 
-  it("removes an enrollment without resetting onboarding", async () => {
+  it("removes an enrollment", async () => {
     const student = await createStudent();
     const course = await createCourse(3);
     await completeStudentOnboarding(student.id, [course.id]);
 
     await removeStudentCourse(student.id, course.id);
 
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
-    await expect(onboardingCompletedAt(student.id)).resolves.toBeInstanceOf(
-      Date,
-    );
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([]);
     await expect(
       db.auditLog.findFirst({
         where: {
@@ -211,7 +203,7 @@ describe("student course selection", () => {
     });
     await db.sectionRegistration.create({
       data: {
-        studentId: student.id,
+        studentId: student.studentId,
         courseId: course.id,
         sectionId: section.id,
       },
@@ -222,7 +214,7 @@ describe("student course selection", () => {
     ).rejects.toMatchObject({
       code: "COURSE_REMOVAL_BLOCKED",
     } satisfies Partial<StudentCourseError>);
-    await expect(enrollmentIds(student.id)).resolves.toEqual([course.id]);
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([course.id]);
     await expect(
       db.auditLog.findFirst({
         where: {
@@ -234,19 +226,18 @@ describe("student course selection", () => {
     ).resolves.toBeNull();
   });
 
-  it("requires onboarding before add and remove operations", async () => {
+  it("allows course management without a persisted onboarding flag", async () => {
     const student = await createStudent();
     const course = await createCourse(3);
 
-    await expect(addStudentCourse(student.id, course.id)).rejects.toMatchObject(
-      {
-        code: "ONBOARDING_NOT_COMPLETED",
-      } satisfies Partial<StudentCourseError>,
-    );
+    await expect(addStudentCourse(student.id, course.id)).resolves.toMatchObject({
+      totalCreditHours: 3,
+    });
+    await removeStudentCourse(student.id, course.id);
     await expect(
       removeStudentCourse(student.id, course.id),
     ).rejects.toMatchObject({
-      code: "ONBOARDING_NOT_COMPLETED",
+      code: "NOT_ENROLLED",
     } satisfies Partial<StudentCourseError>);
   });
 
@@ -274,7 +265,7 @@ describe("student course selection", () => {
     await completeStudentOnboarding(student.id, []);
     await db.user.update({
       where: { id: student.id },
-      data: { role: UserRole.ADMIN },
+      data: { role: UserRole.ADMIN, adminName: "Changed Role" },
     });
 
     await expect(addStudentCourse(student.id, course.id)).rejects.toMatchObject(
@@ -282,7 +273,7 @@ describe("student course selection", () => {
         code: "FORBIDDEN",
       } satisfies Partial<StudentCourseError>,
     );
-    await expect(enrollmentIds(student.id)).resolves.toEqual([]);
+    await expect(enrollmentIds(student.studentId)).resolves.toEqual([]);
   });
 
   it("serializes concurrent additions from independent clients", async () => {
@@ -303,9 +294,11 @@ describe("student course selection", () => {
     expect(
       results.filter((result) => result.status === "rejected"),
     ).toHaveLength(1);
-    expect(await selectedCreditHours(student.id)).toBe(19);
+    expect(await selectedCreditHours(student.studentId)).toBe(19);
     expect(
-      await db.courseEnrollment.count({ where: { studentId: student.id } }),
+      await db.courseEnrollment.count({
+        where: { studentId: student.studentId },
+      }),
     ).toBe(2);
   });
 
@@ -325,7 +318,7 @@ describe("student course selection", () => {
     });
     expect(audit).toMatchObject({
       entityType: "CourseEnrollment",
-      entityId: `${student.id}:${course.id}`,
+      entityId: `${student.studentId}:${course.id}`,
     });
   });
 });
@@ -333,21 +326,26 @@ describe("student course selection", () => {
 async function createStudent() {
   const suffix = randomUUID();
 
-  return db.user.create({
+  const user = await db.user.create({
     data: {
-      fullName: "Course Selection Student",
       email: `course-student-${suffix}@example.com`,
       passwordHash:
         "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
       role: UserRole.STUDENT,
+      isActive: true,
+      mustChangePassword: false,
+    },
+  });
+  const student = await db.student.create({
+    data: {
+      userId: user.id,
+      fullName: "Course Selection Student",
       universityId: `COURSE-${suffix}`,
       completedCreditHours: 30,
       isTransferredThisYear: false,
-      isActive: true,
-      mustChangePassword: false,
-      onboardingCompletedAt: null,
     },
   });
+  return { ...user, studentId: student.id };
 }
 
 async function createCourse(creditHours: number) {
@@ -367,7 +365,7 @@ async function createAdmin() {
   const suffix = randomUUID();
   return db.user.create({
     data: {
-      fullName: "Course Test Admin",
+      adminName: "Course Test Admin",
       email: `course-admin-${suffix}@example.com`,
       passwordHash:
         "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
@@ -385,15 +383,6 @@ async function enrollmentIds(studentId: string) {
     orderBy: { courseId: "asc" },
   });
   return enrollments.map(({ courseId }) => courseId);
-}
-
-async function onboardingCompletedAt(studentId: string) {
-  return (
-    await db.user.findUniqueOrThrow({
-      where: { id: studentId },
-      select: { onboardingCompletedAt: true },
-    })
-  ).onboardingCompletedAt;
 }
 
 async function auditActions(studentId: string, action: string) {

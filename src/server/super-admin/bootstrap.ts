@@ -30,18 +30,14 @@ export async function bootstrapInitialSuperAdmin(
 
       const created = await transaction.user.create({
         data: {
-          fullName: data.fullName,
+          adminName: data.adminName,
           email: data.email,
           passwordHash,
           role: UserRole.SUPER_ADMIN,
           isActive: true,
           mustChangePassword: true,
-          universityId: null,
-          completedCreditHours: null,
-          isTransferredThisYear: null,
-          onboardingCompletedAt: null,
         },
-        select: { id: true, fullName: true, email: true, role: true },
+        select: { id: true, adminName: true, email: true, role: true },
       });
 
       await writeAuditLog(transaction, {

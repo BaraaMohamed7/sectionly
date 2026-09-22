@@ -10,7 +10,7 @@ const INITIAL_ADMIN_ACTION_STATE: AdminActionState = { status: "idle" };
 
 type AdminOption = {
   id: string;
-  fullName: string;
+  adminName: string | null;
   email: string;
   isActive: boolean;
 };
@@ -39,7 +39,7 @@ export function AssignCourseAdminForm({
             </option>
             {admins.map((admin) => (
               <option key={admin.id} value={admin.id}>
-                {admin.fullName} · {admin.email}
+                Dr. {admin.adminName} · {admin.email}
                 {admin.isActive ? "" : " · inactive"}
               </option>
             ))}

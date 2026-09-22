@@ -51,14 +51,14 @@ describe("Super Admin foundation", () => {
     const results = await Promise.allSettled([
       bootstrapInitialSuperAdmin(
         {
-          fullName: "Bootstrap One",
+          adminName: "Bootstrap One",
           email: `bootstrap-one-${suffix}@example.com`,
         },
         firstClient,
       ),
       bootstrapInitialSuperAdmin(
         {
-          fullName: "Bootstrap Two",
+          adminName: "Bootstrap Two",
           email: `bootstrap-two-${suffix}@example.com`,
         },
         secondClient,
@@ -101,7 +101,7 @@ describe("Super Admin foundation", () => {
     const actor = await activeSuperAdmin();
     const email = `managed-${randomUUID()}@example.com`;
     const created = await createAdminAccount(actor.id, {
-      fullName: "Managed Admin",
+      adminName: "Managed Admin",
       email,
     });
 
@@ -144,6 +144,17 @@ describe("Super Admin foundation", () => {
     expect(serializedAudits).not.toContain(created.temporaryPassword);
     expect(serializedAudits).not.toContain(reissued.temporaryPassword);
     expect(serializedAudits).not.toContain(stored.passwordHash);
+  });
+
+  it("rejects an Admin name that already contains the display prefix", async () => {
+    const actor = await activeSuperAdmin();
+
+    await expect(
+      createAdminAccount(actor.id, {
+        adminName: "Dr. Prefixed Name",
+        email: `prefixed-${randomUUID()}@example.com`,
+      }),
+    ).rejects.toThrow();
   });
 
   it("keeps one active Super Admin under competing deactivations", async () => {
@@ -276,18 +287,27 @@ async function activeSuperAdmin() {
 async function createElevatedUser(role: UserRole) {
   const suffix = randomUUID();
 
-  return db.user.create({
+  const user = await db.user.create({
     data: {
-      fullName: `${role} Test User`,
+      adminName: role === UserRole.STUDENT ? null : `${role} Test User`,
       email: `${role.toLowerCase()}-${suffix}@example.com`,
       passwordHash:
         "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
       role,
       isActive: true,
       mustChangePassword: false,
-      universityId: role === UserRole.STUDENT ? `STUDENT-${suffix}` : null,
-      completedCreditHours: role === UserRole.STUDENT ? 0 : null,
-      isTransferredThisYear: role === UserRole.STUDENT ? false : null,
     },
   });
+  if (role === UserRole.STUDENT) {
+    await db.student.create({
+      data: {
+        userId: user.id,
+        fullName: "Student Test User",
+        universityId: `STUDENT-${suffix}`,
+        completedCreditHours: 0,
+        isTransferredThisYear: false,
+      },
+    });
+  }
+  return user;
 }

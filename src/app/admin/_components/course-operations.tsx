@@ -116,7 +116,7 @@ function SectionCard({ course, section }: { course: Course; section: Section }) 
             {formatMinute(section.endMinute)}
           </h3>
           <p>
-            {section.location} · {section.responsibleAdmin.admin.fullName}
+            {section.location} · Dr. {section.responsibleAdmin.admin.adminName}
           </p>
         </div>
       </div>
@@ -195,7 +195,7 @@ function SectionForm({ course, section }: { course: Course; section?: Section })
             <option value="">Select Admin</option>
             {course.admins.map(({ admin }) => (
               <option value={admin.id} key={admin.id}>
-                {admin.fullName}{admin.isActive ? "" : " (inactive)"}
+                Dr. {admin.adminName}{admin.isActive ? "" : " (inactive)"}
               </option>
             ))}
           </select>

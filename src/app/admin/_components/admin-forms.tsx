@@ -6,6 +6,7 @@ import {
   type AdminActionState,
   createAdminAction,
   manageAdminAction,
+  manageStudentLinkClaimAction,
 } from "@/app/admin/actions";
 
 const INITIAL_ADMIN_ACTION_STATE: AdminActionState = { status: "idle" };
@@ -20,8 +21,8 @@ export function CreateAdminForm() {
     <form action={action} className="admin-form">
       <div className="admin-form-grid">
         <label>
-          Full name
-          <input name="fullName" required minLength={2} maxLength={120} />
+          Name after “Dr.”
+          <input name="adminName" required minLength={2} maxLength={120} />
         </label>
         <label>
           Email
@@ -31,6 +32,38 @@ export function CreateAdminForm() {
       <button className="admin-button" disabled={pending} type="submit">
         {pending ? "Creating..." : "Create Admin"}
       </button>
+      <ActionResult state={state} />
+    </form>
+  );
+}
+
+export function StudentLinkClaimControls({ claimId }: { claimId: string }) {
+  const [state, action, pending] = useActionState(
+    manageStudentLinkClaimAction,
+    INITIAL_ADMIN_ACTION_STATE,
+  );
+
+  return (
+    <form action={action} className="admin-control-form">
+      <input type="hidden" name="claimId" value={claimId} />
+      <div className="admin-button-row">
+        <button
+          className="admin-button"
+          disabled={pending}
+          name="intent"
+          value="approve"
+        >
+          Approve link
+        </button>
+        <button
+          className="admin-button admin-button-danger"
+          disabled={pending}
+          name="intent"
+          value="reject"
+        >
+          Reject
+        </button>
+      </div>
       <ActionResult state={state} />
     </form>
   );

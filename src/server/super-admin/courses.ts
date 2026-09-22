@@ -38,14 +38,14 @@ export async function listCourses() {
           admin: {
             select: {
               id: true,
-              fullName: true,
+              adminName: true,
               email: true,
               role: true,
               isActive: true,
             },
           },
         },
-        orderBy: [{ isPrimary: "desc" }, { admin: { fullName: "asc" } }],
+        orderBy: [{ isPrimary: "desc" }, { admin: { adminName: "asc" } }],
       },
     },
     orderBy: { code: "asc" },
@@ -64,14 +64,14 @@ export async function getCourse(courseId: string) {
           admin: {
             select: {
               id: true,
-              fullName: true,
+              adminName: true,
               email: true,
               role: true,
               isActive: true,
             },
           },
         },
-        orderBy: [{ isPrimary: "desc" }, { admin: { fullName: "asc" } }],
+        orderBy: [{ isPrimary: "desc" }, { admin: { adminName: "asc" } }],
       },
     },
   });

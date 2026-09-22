@@ -9,7 +9,11 @@ export type SuperAdminErrorCode =
   | "COURSE_CODE_EXISTS"
   | "INVALID_ASSIGNEE_ROLE"
   | "ASSIGNMENT_EXISTS"
-  | "ASSIGNMENT_NOT_FOUND";
+  | "ASSIGNMENT_NOT_FOUND"
+  | "STUDENT_LINK_CLAIM_NOT_FOUND"
+  | "STUDENT_LINK_CLAIM_NOT_PENDING"
+  | "INVALID_STUDENT_LINK_USER"
+  | "STUDENT_ALREADY_LINKED";
 
 export class SuperAdminError extends Error {
   constructor(readonly code: SuperAdminErrorCode) {

@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { MAX_SELECTED_CREDIT_HOURS } from "@/lib/student-courses";
 import { requireStudent } from "@/server/authorization";
 import { getStudentCourseOverview } from "@/server/student-courses/service";
 
 export default async function StudentDashboardPage() {
   const student = await requireStudent();
-  if (!student.onboardingCompletedAt) redirect("/register/courses");
   const overview = await getStudentCourseOverview(student.id);
 
   return (
@@ -14,7 +12,7 @@ export default async function StudentDashboardPage() {
       <section>
         <p className="text-sm font-bold text-blue-600">Student dashboard</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-          Welcome back, {student.fullName}
+          Welcome back, {student.student.fullName}
         </h1>
         <p className="mt-2 text-slate-600">
           Review the courses you are currently taking in Sectionly.

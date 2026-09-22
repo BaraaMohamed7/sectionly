@@ -22,17 +22,23 @@ const mockedGetServerSession = vi.mocked(getServerSession);
 async function createStudent() {
   const suffix = randomUUID();
 
-  return db.user.create({
+  const user = await db.user.create({
     data: {
-      fullName: "Authorization Student",
       email: `authorization-${suffix}@example.com`,
       passwordHash: await hashPassword("correct horse battery staple"),
       role: UserRole.STUDENT,
+    },
+  });
+  await db.student.create({
+    data: {
+      userId: user.id,
+      fullName: "Authorization Student",
       universityId: `AUTH-${suffix}`,
       completedCreditHours: 32,
       isTransferredThisYear: false,
     },
   });
+  return user;
 }
 
 describe("current-user authorization", () => {
@@ -54,7 +60,7 @@ describe("current-user authorization", () => {
 
     await db.user.update({
       where: { id: user.id },
-      data: { role: UserRole.ADMIN },
+      data: { role: UserRole.ADMIN, adminName: "Authorization Admin" },
     });
     await expect(getCurrentUser()).resolves.toMatchObject({
       role: UserRole.ADMIN,
@@ -89,7 +95,11 @@ describe("current-user authorization", () => {
 
     await db.user.update({
       where: { id: user.id },
-      data: { mustChangePassword: false, role: UserRole.ADMIN },
+      data: {
+        mustChangePassword: false,
+        role: UserRole.ADMIN,
+        adminName: "Authorization Admin",
+      },
     });
     await expect(requireStudent()).rejects.toMatchObject({
       code: "FORBIDDEN",
@@ -109,7 +119,7 @@ describe("current-user authorization", () => {
 
     await db.user.update({
       where: { id: user.id },
-      data: { role: UserRole.SUPER_ADMIN },
+      data: { role: UserRole.SUPER_ADMIN, adminName: "Authorization Admin" },
     });
     await expect(requireSuperAdmin()).resolves.toMatchObject({ id: user.id });
 

@@ -19,7 +19,7 @@ import { writeAuditLog } from "@/server/write-audit-log";
 
 const adminSelect = {
   id: true,
-  fullName: true,
+  adminName: true,
   email: true,
   role: true,
   isActive: true,
@@ -32,7 +32,7 @@ export async function listAdminAccounts() {
   return db.user.findMany({
     where: { role: { in: [UserRole.ADMIN, UserRole.SUPER_ADMIN] } },
     select: adminSelect,
-    orderBy: [{ role: "desc" }, { fullName: "asc" }],
+    orderBy: [{ role: "desc" }, { adminName: "asc" }],
   });
 }
 
@@ -72,16 +72,12 @@ export async function createAdminAccount(
 
       const created = await transaction.user.create({
         data: {
-          fullName: data.fullName,
+          adminName: data.adminName,
           email: data.email,
           passwordHash,
           role: UserRole.ADMIN,
           isActive: true,
           mustChangePassword: true,
-          universityId: null,
-          completedCreditHours: null,
-          isTransferredThisYear: null,
-          onboardingCompletedAt: null,
         },
         select: adminSelect,
       });

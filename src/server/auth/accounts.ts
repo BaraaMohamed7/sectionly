@@ -1,5 +1,9 @@
-import { Prisma, UserRole } from "@/generated/prisma/client";
-import { db } from "@/server/db";
+import {
+  Prisma,
+  StudentLinkClaimStatus,
+  UserRole,
+} from "@/generated/prisma/client";
+import { db, type DatabaseClient } from "@/server/db";
 import {
   DUMMY_PASSWORD_HASH,
   hashPassword,
@@ -11,12 +15,19 @@ import {
   registerStudentSchema,
 } from "@/server/auth/validation";
 
-export type AccountConflictField = "email" | "universityId";
+export type AccountConflictField = "email";
 
 export class AccountConflictError extends Error {
   constructor(readonly field: AccountConflictField) {
     super(`An account with this ${field} already exists`);
     this.name = "AccountConflictError";
+  }
+}
+
+export class StudentAccountUnavailableError extends Error {
+  constructor() {
+    super("Student account registration is unavailable for these details");
+    this.name = "StudentAccountUnavailableError";
   }
 }
 
@@ -33,49 +44,100 @@ function isUniqueConstraintError(error: unknown) {
   );
 }
 
-export async function registerStudent(input: unknown) {
+export async function registerStudent(
+  input: unknown,
+  database: DatabaseClient = db,
+) {
   const data = registerStudentSchema.parse(input);
   const passwordHash = await hashPassword(data.password);
 
   try {
-    const user = await db.user.create({
-      data: {
-        fullName: data.fullName,
-        universityId: data.universityId,
-        email: data.email,
-        passwordHash,
-        completedCreditHours: data.completedCreditHours,
-        isTransferredThisYear: data.isTransferredThisYear,
-        role: UserRole.STUDENT,
-        isActive: true,
-        mustChangePassword: false,
-        onboardingCompletedAt: null,
-      },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-      },
-    });
+    return await database.$transaction(async (transaction) => {
+      const existingStudents = await transaction.$queryRaw<
+        Array<{ id: string; userId: string | null }>
+      >`
+        SELECT id, "userId"
+        FROM "Student"
+        WHERE "universityId" = ${data.universityId}
+        FOR UPDATE
+      `;
+      const existingStudent = existingStudents[0];
 
-    return user;
+      if (existingStudent?.userId) {
+        throw new StudentAccountUnavailableError();
+      }
+
+      const user = await transaction.user.create({
+        data: {
+          email: data.email,
+          passwordHash,
+          role: UserRole.STUDENT,
+          adminName: null,
+          isActive: true,
+          mustChangePassword: false,
+        },
+        select: { id: true, email: true },
+      });
+
+      if (!existingStudent) {
+        const student = await transaction.student.create({
+          data: {
+            universityId: data.universityId,
+            fullName: data.fullName,
+            completedCreditHours: data.completedCreditHours,
+            isTransferredThisYear: data.isTransferredThisYear,
+            userId: user.id,
+          },
+          select: { id: true },
+        });
+        return {
+          ...user,
+          name: data.fullName,
+          state: "LINKED" as const,
+          studentId: student.id,
+        };
+      }
+
+      const claim = await transaction.studentLinkClaim.create({
+        data: {
+          studentId: existingStudent.id,
+          userId: user.id,
+          status: StudentLinkClaimStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      return {
+        ...user,
+        name: data.fullName,
+        state: "PENDING_CLAIM" as const,
+        claimId: claim.id,
+      };
+    });
   } catch (error) {
+    if (error instanceof StudentAccountUnavailableError) throw error;
     if (!isUniqueConstraintError(error)) {
       throw error;
     }
 
-    const existing = await db.user.findFirst({
-      where: {
-        OR: [{ email: data.email }, { universityId: data.universityId }],
-      },
-      select: { email: true, universityId: true },
-    });
+    const [existingUser, existingStudent] = await Promise.all([
+      database.user.findUnique({
+        where: { email: data.email },
+        select: { email: true },
+      }),
+      database.student.findUnique({
+        where: { universityId: data.universityId },
+        select: { id: true, userId: true },
+      }),
+    ]);
 
-    if (existing?.email === data.email) {
+    if (existingStudent?.userId) {
+      throw new StudentAccountUnavailableError();
+    }
+    if (existingUser) {
       throw new AccountConflictError("email");
     }
-
-    throw new AccountConflictError("universityId");
+    if (existingStudent) throw new StudentAccountUnavailableError();
+    throw error;
   }
 }
 
@@ -91,7 +153,8 @@ export async function authenticateCredentials(input: unknown) {
     select: {
       id: true,
       email: true,
-      fullName: true,
+      adminName: true,
+      student: { select: { fullName: true } },
       passwordHash: true,
       isActive: true,
     },
@@ -108,7 +171,9 @@ export async function authenticateCredentials(input: unknown) {
   return {
     id: user.id,
     email: user.email,
-    name: user.fullName,
+    name:
+      user.student?.fullName ??
+      (user.adminName ? `Dr. ${user.adminName}` : user.email),
   };
 }
 

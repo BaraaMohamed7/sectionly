@@ -2,16 +2,16 @@ import { bootstrapInitialSuperAdmin } from "../src/server/super-admin/bootstrap"
 import { db } from "../src/server/db";
 
 async function main() {
-  const fullName = process.env.BOOTSTRAP_SUPER_ADMIN_NAME;
+  const adminName = process.env.BOOTSTRAP_SUPER_ADMIN_NAME;
   const email = process.env.BOOTSTRAP_SUPER_ADMIN_EMAIL;
 
-  if (!fullName || !email) {
+  if (!adminName || !email) {
     throw new Error(
       "Set BOOTSTRAP_SUPER_ADMIN_NAME and BOOTSTRAP_SUPER_ADMIN_EMAIL",
     );
   }
 
-  const result = await bootstrapInitialSuperAdmin({ fullName, email });
+  const result = await bootstrapInitialSuperAdmin({ adminName, email });
 
   console.log(`Created Super Admin: ${result.superAdmin.email}`);
   console.log(`Temporary password: ${result.temporaryPassword}`);

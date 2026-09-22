@@ -62,6 +62,11 @@ A Student can:
 
 - manage their profile.
 
+`User` is the authentication account and `Student` is the academic record. They
+have independent IDs. Course enrollments, section registrations, names,
+university IDs, and academic profile fields belong to `Student`; login email,
+password, locale, role, and active state belong to `User`.
+
 ## 2.2 Admin
 
 An Admin represents a teaching assistant/course administrator.
@@ -118,6 +123,8 @@ A Super Admin can:
 
 - view system audit logs.
 
+- approve or reject pending Student account-link claims.
+
 The system must never be left with zero Super Admins.
 
 ---
@@ -138,15 +145,24 @@ Student registration collects:
 
 - whether the student transferred from another college/university this year.
 
-Email must be unique.
-
-University ID must be unique.
+Email is unique across User accounts. University ID is unique across Student
+records.
 
 Email must be valid, but a university-domain email is not required.
 
 No email OTP or university verification is required for the MVP.
 
-All required Student information is collected before the account is created. After account creation, the Student is authenticated automatically and continues directly to course selection.
+For a new university ID, account creation atomically creates a linked User and
+Student with distinct IDs. The Student can authenticate and continue to course
+selection.
+
+If the university ID belongs to an existing unlinked Student record, account
+creation creates a separate User and a pending StudentLinkClaim. Student
+features remain blocked until a Super Admin approves the link. Submitted data
+must not overwrite the existing academic record.
+
+If the existing Student is already linked, registration returns a generic
+unavailable response without disclosing account ownership.
 
 The MVP does not implement application-level rate limiting. Login and registration must receive platform-level rate limiting before unrestricted public deployment.
 
@@ -171,18 +187,22 @@ The calculated level is displayed throughout the product where useful.
 
 ---
 
-# 5. Student Onboarding Flow
+# 5. Student Entry Flow
 
 Expected flow:
 
 Create Account\
+→ Complete Missing Profile Fields, if any\
 → Select Courses\
 → Confirm Courses\
 → Dashboard
 
-The student must explicitly confirm their selected courses before finishing onboarding.
+An account awaiting a Student link stays on a review-status screen until a
+Super Admin resolves the claim.
 
-No Admin approval is required.
+Course selection is a UI flow rather than persisted account state. The system
+does not store an onboarding-completed flag, and Students may manage courses
+later regardless of whether they used the initial selection screen.
 
 ---
 
@@ -1209,7 +1229,7 @@ Super Admins can:
 
 Initial Admin creation may use:
 
-- full name,
+- name displayed after the `Dr.` prefix,
 
 - email,
 
@@ -1220,6 +1240,13 @@ New Admins must change their temporary password on first login.
 Admin accounts are deactivated through an `isActive` state rather than hard-deleted. Inactive Admins cannot authenticate or manage the system, and historical references remain intact.
 
 Advanced invitation/email flows are deferred.
+
+The Admin name is stored without `Dr.` and displayed as `Dr. {adminName}`.
+
+The Admins area also lists pending StudentLinkClaims. Only active,
+password-ready Super Admins may approve or reject them. Approval links the User
+to the existing Student without moving academic rows. Rejection keeps both the
+User and Student records and preserves claim history.
 
 The system must protect against removing the final Super Admin.
 
@@ -1308,6 +1335,8 @@ Public:
 
 Authenticated onboarding:
 
+/complete-profile\
+/student-link-status\
 /register/courses\
 /register/confirm
 
@@ -1377,6 +1406,12 @@ The implementation must preserve:
 14. Confirmed conflict overrides recompute current conflicts on the server.
 
 15. Concurrent section edits use the expected updatedAt value and reject stale writers.
+
+16. User IDs and Student IDs are distinct and never substituted for one another.
+
+17. Academic relationships remain attached to Student when an account link is approved.
+
+18. At most one pending link claim exists per Student and per requesting User.
 
 ---
 
@@ -1453,6 +1488,12 @@ The demo should prove at least these scenarios:
 ### Student onboarding
 
 Student creates account, enters academic information, selects &lt;=19 CH, confirms, reaches Dashboard.
+
+### Existing Student account link
+
+An account created for an existing unlinked Student remains blocked until a
+Super Admin approves its claim; approval exposes the existing academic records
+without changing their Student ID.
 
 ### Course registration
 

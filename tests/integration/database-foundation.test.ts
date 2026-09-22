@@ -35,14 +35,23 @@ describe("PostgreSQL database foundation", () => {
     expect(result).toEqual([{ value: 1 }]);
   });
 
-  it("rejects a student without required student fields", async () => {
+  it("enforces role-specific Admin naming", async () => {
     await expect(
       prisma.user.create({
         data: {
-          fullName: "Incomplete Student",
           email: `student-${randomUUID()}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.STUDENT,
+          adminName: "Not an Admin",
+        },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.user.create({
+        data: {
+          email: `admin-without-name-${randomUUID()}@example.com`,
+          passwordHash: "not-a-real-password-hash",
+          role: UserRole.ADMIN,
         },
       }),
     ).rejects.toThrow();
@@ -86,7 +95,7 @@ describe("PostgreSQL database foundation", () => {
       }),
       prisma.user.create({
         data: {
-          fullName: "Section Admin",
+          adminName: "Section Admin",
           email: `section-admin-${suffix}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -133,7 +142,7 @@ describe("PostgreSQL database foundation", () => {
     await expect(
       prisma.user.create({
         data: {
-          fullName: "Uppercase Email Admin",
+          adminName: "Uppercase Email Admin",
           email: `ADMIN-${randomUUID()}@EXAMPLE.COM`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -166,7 +175,7 @@ describe("PostgreSQL database foundation", () => {
       }),
       prisma.user.create({
         data: {
-          fullName: "First Admin",
+          adminName: "First Admin",
           email: `admin-one-${suffix}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -174,7 +183,7 @@ describe("PostgreSQL database foundation", () => {
       }),
       prisma.user.create({
         data: {
-          fullName: "Second Admin",
+          adminName: "Second Admin",
           email: `admin-two-${suffix}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -214,7 +223,7 @@ describe("PostgreSQL database foundation", () => {
       }),
       prisma.user.create({
         data: {
-          fullName: "Assigned Admin",
+          adminName: "Assigned Admin",
           email: `assigned-${suffix}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -222,7 +231,7 @@ describe("PostgreSQL database foundation", () => {
       }),
       prisma.user.create({
         data: {
-          fullName: "Unassigned Admin",
+          adminName: "Unassigned Admin",
           email: `unassigned-${suffix}@example.com`,
           passwordHash: "not-a-real-password-hash",
           role: UserRole.ADMIN,
@@ -255,12 +264,17 @@ describe("PostgreSQL database foundation", () => {
 
   it("enforces enrollment and section course consistency on registrations", async () => {
     const suffix = randomUUID();
-    const student = await prisma.user.create({
+    const studentUser = await prisma.user.create({
       data: {
-        fullName: "Registered Student",
         email: `registered-${suffix}@example.com`,
         passwordHash: "not-a-real-password-hash",
         role: UserRole.STUDENT,
+      },
+    });
+    const student = await prisma.student.create({
+      data: {
+        userId: studentUser.id,
+        fullName: "Registered Student",
         universityId: `U-${suffix}`,
         completedCreditHours: 0,
         isTransferredThisYear: false,
@@ -268,7 +282,7 @@ describe("PostgreSQL database foundation", () => {
     });
     const admin = await prisma.user.create({
       data: {
-        fullName: "Course Admin",
+        adminName: "Course Admin",
         email: `registration-admin-${suffix}@example.com`,
         passwordHash: "not-a-real-password-hash",
         role: UserRole.ADMIN,
@@ -328,12 +342,17 @@ describe("PostgreSQL database foundation", () => {
       }),
     ).rejects.toThrow();
 
-    const studentWithoutEnrollment = await prisma.user.create({
+    const studentWithoutEnrollmentUser = await prisma.user.create({
       data: {
-        fullName: "Student Without Enrollment",
         email: `not-enrolled-${suffix}@example.com`,
         passwordHash: "not-a-real-password-hash",
         role: UserRole.STUDENT,
+      },
+    });
+    const studentWithoutEnrollment = await prisma.student.create({
+      data: {
+        userId: studentWithoutEnrollmentUser.id,
+        fullName: "Student Without Enrollment",
         universityId: `N-${suffix}`,
         completedCreditHours: 0,
         isTransferredThisYear: false,

@@ -62,7 +62,7 @@ export default async function CoursesPage() {
                   </span>
                   <span>
                     {primary
-                      ? `Primary: ${primary.admin.fullName}`
+                      ? `Primary: Dr. ${primary.admin.adminName}`
                       : "No primary Admin"}
                   </span>
                 </footer>

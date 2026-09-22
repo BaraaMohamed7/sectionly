@@ -19,6 +19,7 @@ import {
   updateCourse,
 } from "@/server/super-admin/courses";
 import { SuperAdminError } from "@/server/super-admin/errors";
+import { resolveStudentLinkClaim } from "@/server/super-admin/student-links";
 
 export type AdminActionState = {
   status: "idle" | "success" | "error";
@@ -33,7 +34,7 @@ export async function createAdminAction(
   try {
     const actor = await requireSuperAdmin();
     const result = await createAdminAccount(actor.id, {
-      fullName: formData.get("fullName"),
+      adminName: formData.get("adminName"),
       email: formData.get("email"),
     });
     revalidatePath("/admin/admins");
@@ -79,6 +80,31 @@ export async function manageAdminAction(
 
     revalidateAdminPaths(adminId);
     return { status: "success", message: "Admin account updated." };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function manageStudentLinkClaimAction(
+  _previousState: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  try {
+    const actor = await requireSuperAdmin();
+    const intent = formData.get("intent");
+    if (intent !== "approve" && intent !== "reject") {
+      throw new Error("Unknown Student link action");
+    }
+    await resolveStudentLinkClaim(
+      actor.id,
+      String(formData.get("claimId") ?? ""),
+      intent,
+    );
+    revalidatePath("/admin/admins");
+    return {
+      status: "success",
+      message: intent === "approve" ? "Student link approved." : "Student link rejected.",
+    };
   } catch (error) {
     return actionError(error);
   }
@@ -222,6 +248,12 @@ function errorMessage(code: SuperAdminError["code"]) {
     INVALID_ASSIGNEE_ROLE: "Only Admins and Super Admins can be assigned.",
     ASSIGNMENT_EXISTS: "This Admin is already assigned to the course.",
     ASSIGNMENT_NOT_FOUND: "The course assignment was not found.",
+    STUDENT_LINK_CLAIM_NOT_FOUND: "The Student link request was not found.",
+    STUDENT_LINK_CLAIM_NOT_PENDING:
+      "That Student link request has already been resolved.",
+    INVALID_STUDENT_LINK_USER:
+      "The requesting account is no longer eligible for Student access.",
+    STUDENT_ALREADY_LINKED: "That Student or account is already linked.",
   };
 
   return messages[code];

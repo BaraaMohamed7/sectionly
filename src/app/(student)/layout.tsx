@@ -16,7 +16,13 @@ export default async function StudentLayout({
   if (!student) redirect("/login");
   if (student.mustChangePassword) redirect("/change-password");
   if (student.role !== UserRole.STUDENT) redirect("/auth/continue");
-  if (!student.onboardingCompletedAt) redirect("/register/courses");
+  if (!student.student) redirect("/student-link-status");
+  if (
+    student.student.completedCreditHours === null ||
+    student.student.isTransferredThisYear === null
+  ) {
+    redirect("/complete-profile");
+  }
 
   return (
     <div
@@ -38,7 +44,7 @@ export default async function StudentLayout({
           </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm font-semibold text-slate-600 sm:inline">
-              {student.fullName}
+              {student.student.fullName}
             </span>
             <SignOutButton />
           </div>

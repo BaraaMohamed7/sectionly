@@ -146,6 +146,11 @@ The system must never be left with zero SUPER_ADMIN users.
 
 STUDENT:
 
+- requires an active STUDENT User linked to a Student record,
+
+- requires completedCreditHours and isTransferredThisYear to be non-null for
+  normal Student features,
+
 - manages own course enrollments,
 
 - registers own sections,
@@ -192,6 +197,48 @@ Changing a URL or request payload must never bypass authorization.
 
 ---
 
+# 5.1 Identity Model
+
+User is the authentication identity. Student is the academic identity.
+
+Never assume User.id equals Student.id. Legacy migrated Students intentionally
+retain their former User UUID, but all newly created records use distinct UUIDs.
+
+Academic relationships use Student.id, including CourseEnrollment and
+SectionRegistration. Audit actorId uses User.id. Student aggregate audit entity
+IDs use Student.id.
+
+Student.fullName and Student.universityId are required academic fields.
+completedCreditHours and isTransferredThisYear may be null until profile
+completion. Completeness is derived from those nullable fields. Do not add or
+reintroduce an onboarding-completed flag.
+
+ADMIN and SUPER_ADMIN names live in User.adminName without a "Dr." prefix.
+Display the prefix as `Dr. {adminName}` in the UI. STUDENT Users must not have
+adminName.
+
+Public registration behavior:
+
+- a new university ID creates a linked User and Student atomically,
+
+- an existing unlinked Student creates a separate User and pending
+  StudentLinkClaim,
+
+- an existing linked Student receives a generic unavailable response that does
+  not reveal account details.
+
+Only an active, password-ready SUPER_ADMIN may approve or reject pending link
+claims. Approval links Student.userId without moving or rewriting academic
+records. Rejection preserves both records. Claim resolution must lock and
+revalidate the actor User, requesting User, Student, and claim, then write the
+audit row in the same transaction.
+
+Student aggregate mutations must first authorize the User from an authoritative
+database row, then lock the linked Student row as the per-student serialization
+point. Lock multiple rows in deterministic UUID order.
+
+---
+
 # 6. Student Academic Level
 
 Do NOT store academic level independently.
@@ -227,6 +274,9 @@ Maximum selected credit hours:
 The server must enforce this.
 
 Students may add/remove courses later.
+
+Initial course selection is a UI flow, not persisted account state. Course
+management authorization must never depend on an onboarding-completed flag.
 
 If removing a course with an existing SectionRegistration:
 

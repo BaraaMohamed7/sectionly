@@ -1,22 +1,52 @@
 model User {
-  id                    String    @id @default(uuid()) @db.Uuid
-  fullName              String
-  email                 String    @unique
-  passwordHash          String
-  role                  UserRole  @default(STUDENT)
-  universityId          String?   @unique
-  completedCreditHours  Int?
-  isTransferredThisYear Boolean?
-  locale                Locale    @default(EN)
-  isActive              Boolean   @default(true)
-  mustChangePassword    Boolean   @default(false)
-  onboardingCompletedAt DateTime? @db.Timestamptz(3)
-  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  id                 String   @id @default(uuid()) @db.Uuid
+  email              String   @unique
+  passwordHash       String
+  role               UserRole @default(STUDENT)
+  adminName           String?
+  locale              Locale   @default(EN)
+  isActive            Boolean  @default(true)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
 
-  courseAssignments     CourseAdmin[]       @relation("CourseAdminUser")
-  courseEnrollments     CourseEnrollment[]  @relation("StudentEnrollments")
-  authoredAnnouncements Announcement[]      @relation("AnnouncementAuthor")
-  notifications         AdminNotification[] @relation("NotificationRecipient")
-  auditLogs             AuditLog[]          @relation("AuditActor")
+  student                   Student?
+  requestedStudentLinks      StudentLinkClaim[] @relation("StudentLinkRequester")
+  resolvedStudentLinks       StudentLinkClaim[] @relation("StudentLinkResolver")
+  courseAssignments          CourseAdmin[]       @relation("CourseAdminUser")
+  authoredAnnouncements      Announcement[]      @relation("AnnouncementAuthor")
+  notifications              AdminNotification[] @relation("NotificationRecipient")
+  auditLogs                  AuditLog[]          @relation("AuditActor")
+}
+
+model Student {
+  id                      String   @id @default(uuid()) @db.Uuid
+  universityId            String   @unique
+  fullName                String
+  completedCreditHours    Int?
+  isTransferredThisYear   Boolean?
+  userId                  String?  @unique @db.Uuid
+  createdAt               DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(3)
+
+  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  courseEnrollments CourseEnrollment[] @relation("StudentEnrollments")
+  linkClaims        StudentLinkClaim[]
+}
+
+model StudentLinkClaim {
+  id           String                 @id @default(uuid()) @db.Uuid
+  studentId    String                 @db.Uuid
+  userId       String                 @db.Uuid
+  status       StudentLinkClaimStatus @default(PENDING)
+  resolvedById String?                @db.Uuid
+  createdAt    DateTime               @default(now()) @db.Timestamptz(3)
+  resolvedAt   DateTime?              @db.Timestamptz(3)
+
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  user       User    @relation("StudentLinkRequester", fields: [userId], references: [id], onDelete: Restrict)
+  resolvedBy User?   @relation("StudentLinkResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, userId])
+  @@index([status, createdAt])
 }

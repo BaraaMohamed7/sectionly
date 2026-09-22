@@ -9,15 +9,22 @@ import {
 } from "@/server/student-courses/validation";
 import { writeAuditLog } from "@/server/write-audit-log";
 
-type LockedStudent = {
+type LockedAccount = {
   id: string;
   role: UserRole;
   isActive: boolean;
   mustChangePassword: boolean;
-  universityId: string | null;
+};
+
+type LockedStudent = {
+  id: string;
   completedCreditHours: number | null;
   isTransferredThisYear: boolean | null;
-  onboardingCompletedAt: Date | null;
+};
+
+type StudentPrincipal = {
+  userId: string;
+  studentId: string;
 };
 
 type LockedCourse = {
@@ -43,17 +50,18 @@ export async function listCoursesForOnboarding() {
   });
 }
 
-export async function getStudentCourseOverview(studentId: string) {
-  const id = courseIdSchema.parse(studentId);
+export async function getStudentCourseOverview(
+  userId: string,
+  database: DatabaseClient = db,
+) {
+  const principal = await resolveStudentPrincipal(database, userId);
   const [enrollments, courses] = await Promise.all([
-    db.courseEnrollment.findMany({
-      where: { studentId: id },
-      select: {
-        course: { select: courseSummarySelect },
-      },
+    database.courseEnrollment.findMany({
+      where: { studentId: principal.studentId },
+      select: { course: { select: courseSummarySelect } },
       orderBy: { course: { code: "asc" } },
     }),
-    db.course.findMany({
+    database.course.findMany({
       select: courseSummarySelect,
       orderBy: { code: "asc" },
     }),
@@ -76,76 +84,72 @@ export async function getStudentCourseOverview(studentId: string) {
 }
 
 export async function completeStudentOnboarding(
-  studentId: string,
+  userId: string,
   submittedCourseIds: unknown,
   database: DatabaseClient = db,
 ) {
-  const id = courseIdSchema.parse(studentId);
+  const accountId = courseIdSchema.parse(userId);
   const courseIds = parseCourseIds(submittedCourseIds);
 
   return database.$transaction(async (transaction) => {
-    const student = await lockAndValidateStudent(transaction, id);
-
-    if (student.onboardingCompletedAt !== null) {
-      throw new StudentCourseError("ONBOARDING_ALREADY_COMPLETED");
-    }
-
-    const courses = await lockCoursesForShare(transaction, courseIds);
-    if (courses.length !== courseIds.length) {
+    const principal = await lockAndValidateStudent(transaction, accountId);
+    const existing = await transaction.courseEnrollment.findMany({
+      where: { studentId: principal.studentId },
+      select: { courseId: true },
+    });
+    const existingIds = existing.map(({ courseId }) => courseId);
+    const allCourseIds = [...new Set([...existingIds, ...courseIds])];
+    const courses = await lockCoursesForShare(transaction, allCourseIds);
+    if (courses.length !== allCourseIds.length) {
       throw new StudentCourseError("COURSE_NOT_FOUND");
     }
 
     const totalCreditHours = sumCreditHours(courses);
     assertWithinCreditLimit(totalCreditHours);
-
-    if (courseIds.length > 0) {
+    const existingSet = new Set(existingIds);
+    const newCourseIds = courseIds.filter((courseId) => !existingSet.has(courseId));
+    if (newCourseIds.length > 0) {
       await transaction.courseEnrollment.createMany({
-        data: courseIds.map((courseId) => ({
-          studentId: id,
+        data: newCourseIds.map((courseId) => ({
+          studentId: principal.studentId,
           courseId,
         })),
       });
     }
-    const completedAt = new Date();
-    await transaction.user.update({
-      where: { id },
-      data: { onboardingCompletedAt: completedAt },
-    });
     await writeAuditLog(transaction, {
-      actorId: id,
-      action: AUDIT_ACTIONS.STUDENT_ONBOARDING_COMPLETED,
-      entityType: "User",
-      entityId: id,
+      actorId: principal.userId,
+      action: AUDIT_ACTIONS.STUDENT_INITIAL_COURSE_SELECTION_SAVED,
+      entityType: "Student",
+      entityId: principal.studentId,
       metadata: {
-        courseIds,
-        courseCount: courses.length,
+        submittedCourseIds: courseIds,
+        addedCourseIds: newCourseIds,
+        selectedCourseCount: courses.length,
         totalCreditHours,
       },
     });
 
     return {
-      completedAt,
-      courseCount: courses.length,
+      addedCourseCount: newCourseIds.length,
+      selectedCourseCount: courses.length,
       totalCreditHours,
     };
   });
 }
 
 export async function addStudentCourse(
-  studentId: string,
+  userId: string,
   targetCourseId: string,
   database: DatabaseClient = db,
 ) {
-  const id = courseIdSchema.parse(studentId);
+  const accountId = courseIdSchema.parse(userId);
   const courseId = courseIdSchema.parse(targetCourseId);
 
   try {
     return await database.$transaction(async (transaction) => {
-      const student = await lockAndValidateStudent(transaction, id);
-      assertOnboardingCompleted(student);
-
+      const principal = await lockAndValidateStudent(transaction, accountId);
       const currentEnrollments = await transaction.courseEnrollment.findMany({
-        where: { studentId: id },
+        where: { studentId: principal.studentId },
         select: { courseId: true },
       });
       const currentCourseIds = currentEnrollments.map(
@@ -158,9 +162,7 @@ export async function addStudentCourse(
       const courseById = new Map(courses.map((course) => [course.id, course]));
       const targetCourse = courseById.get(courseId);
 
-      if (!targetCourse) {
-        throw new StudentCourseError("COURSE_NOT_FOUND");
-      }
+      if (!targetCourse) throw new StudentCourseError("COURSE_NOT_FOUND");
       if (currentCourseIds.includes(courseId)) {
         throw new StudentCourseError("ALREADY_ENROLLED");
       }
@@ -176,14 +178,14 @@ export async function addStudentCourse(
       assertWithinCreditLimit(totalCreditHours);
 
       await transaction.courseEnrollment.create({
-        data: { studentId: id, courseId },
+        data: { studentId: principal.studentId, courseId },
       });
       await writeAuditLog(transaction, {
-        actorId: id,
+        actorId: principal.userId,
         courseId,
         action: AUDIT_ACTIONS.STUDENT_COURSE_ADDED,
         entityType: "CourseEnrollment",
-        entityId: enrollmentEntityId(id, courseId),
+        entityId: enrollmentEntityId(principal.studentId, courseId),
         metadata: {
           courseCreditHours: targetCourse.creditHours,
           totalCreditHours,
@@ -201,26 +203,22 @@ export async function addStudentCourse(
 }
 
 export async function removeStudentCourse(
-  studentId: string,
+  userId: string,
   targetCourseId: string,
   database: DatabaseClient = db,
 ) {
-  const id = courseIdSchema.parse(studentId);
+  const accountId = courseIdSchema.parse(userId);
   const courseId = courseIdSchema.parse(targetCourseId);
 
   try {
     return await database.$transaction(async (transaction) => {
-      const student = await lockAndValidateStudent(transaction, id);
-      assertOnboardingCompleted(student);
-
+      const principal = await lockAndValidateStudent(transaction, accountId);
       const enrollment = await transaction.courseEnrollment.findUnique({
         where: {
-          studentId_courseId: { studentId: id, courseId },
+          studentId_courseId: { studentId: principal.studentId, courseId },
         },
       });
-      if (!enrollment) {
-        throw new StudentCourseError("NOT_ENROLLED");
-      }
+      if (!enrollment) throw new StudentCourseError("NOT_ENROLLED");
 
       const courses = await lockCoursesForShare(transaction, [courseId]);
       if (courses.length !== 1) {
@@ -229,15 +227,15 @@ export async function removeStudentCourse(
 
       await transaction.courseEnrollment.delete({
         where: {
-          studentId_courseId: { studentId: id, courseId },
+          studentId_courseId: { studentId: principal.studentId, courseId },
         },
       });
       await writeAuditLog(transaction, {
-        actorId: id,
+        actorId: principal.userId,
         courseId,
         action: AUDIT_ACTIONS.STUDENT_COURSE_REMOVED,
         entityType: "CourseEnrollment",
-        entityId: enrollmentEntityId(id, courseId),
+        entityId: enrollmentEntityId(principal.studentId, courseId),
         metadata: { courseCreditHours: courses[0]!.creditHours },
       });
 
@@ -251,39 +249,76 @@ export async function removeStudentCourse(
   }
 }
 
+async function resolveStudentPrincipal(
+  database: DatabaseClient,
+  inputUserId: string,
+): Promise<StudentPrincipal> {
+  const userId = courseIdSchema.parse(inputUserId);
+  const account = await database.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      role: true,
+      isActive: true,
+      mustChangePassword: true,
+      student: {
+        select: {
+          id: true,
+          completedCreditHours: true,
+          isTransferredThisYear: true,
+        },
+      },
+    },
+  });
+  if (
+    !account ||
+    account.role !== UserRole.STUDENT ||
+    !account.isActive ||
+    account.mustChangePassword ||
+    !account.student ||
+    account.student.completedCreditHours === null ||
+    account.student.isTransferredThisYear === null
+  ) {
+    throw new StudentCourseError("FORBIDDEN");
+  }
+  return { userId: account.id, studentId: account.student.id };
+}
+
 async function lockAndValidateStudent(
   transaction: Prisma.TransactionClient,
-  studentId: string,
-) {
-  const students = await transaction.$queryRaw<LockedStudent[]>`
-    SELECT
-      id,
-      role,
-      "isActive",
-      "mustChangePassword",
-      "universityId",
-      "completedCreditHours",
-      "isTransferredThisYear",
-      "onboardingCompletedAt"
+  userId: string,
+): Promise<StudentPrincipal> {
+  const accounts = await transaction.$queryRaw<LockedAccount[]>`
+    SELECT id, role, "isActive", "mustChangePassword"
     FROM "User"
-    WHERE id = ${studentId}::uuid
+    WHERE id = ${userId}::uuid
+    FOR SHARE
+  `;
+  const account = accounts[0];
+  if (
+    !account ||
+    account.role !== UserRole.STUDENT ||
+    !account.isActive ||
+    account.mustChangePassword
+  ) {
+    throw new StudentCourseError("FORBIDDEN");
+  }
+
+  const students = await transaction.$queryRaw<LockedStudent[]>`
+    SELECT id, "completedCreditHours", "isTransferredThisYear"
+    FROM "Student"
+    WHERE "userId" = ${userId}::uuid
     FOR UPDATE
   `;
   const student = students[0];
-
   if (
     !student ||
-    student.role !== UserRole.STUDENT ||
-    !student.isActive ||
-    student.mustChangePassword ||
-    student.universityId === null ||
     student.completedCreditHours === null ||
     student.isTransferredThisYear === null
   ) {
     throw new StudentCourseError("FORBIDDEN");
   }
-
-  return student;
+  return { userId: account.id, studentId: student.id };
 }
 
 async function lockCoursesForShare(
@@ -291,10 +326,7 @@ async function lockCoursesForShare(
   courseIds: string[],
 ) {
   const ids = [...new Set(courseIds)].sort();
-
-  if (ids.length === 0) {
-    return [];
-  }
+  if (ids.length === 0) return [];
 
   return transaction.$queryRaw<LockedCourse[]>(Prisma.sql`
     SELECT id, code, "nameAr", "nameEn", "creditHours"
@@ -303,12 +335,6 @@ async function lockCoursesForShare(
     ORDER BY id
     FOR SHARE
   `);
-}
-
-function assertOnboardingCompleted(student: LockedStudent) {
-  if (student.onboardingCompletedAt === null) {
-    throw new StudentCourseError("ONBOARDING_NOT_COMPLETED");
-  }
 }
 
 function assertWithinCreditLimit(totalCreditHours: number) {

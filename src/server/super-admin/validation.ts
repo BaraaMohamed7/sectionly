@@ -13,7 +13,14 @@ const nullableLocalDateTimeSchema = z.preprocess(
 
 export const createAdminSchema = z
   .object({
-    fullName: z.string().trim().min(2).max(120),
+    adminName: z
+      .string()
+      .trim()
+      .min(2)
+      .max(120)
+      .refine((name) => !/^dr(?:\.\s*|\s+)/i.test(name), {
+        message: 'Enter the name without the "Dr." prefix',
+      }),
     email: emailSchema,
   })
   .strict();

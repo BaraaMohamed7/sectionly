@@ -21,7 +21,7 @@ export default async function AdminAccountPage({
     <div className="admin-page-stack">
       <section className="admin-page-heading">
         <p className="admin-eyebrow">Admin account</p>
-        <h1>{admin.fullName}</h1>
+        <h1>Dr. {admin.adminName}</h1>
         <p>{admin.email}</p>
         <div className="admin-badges">
           <span className="admin-badge admin-badge-blue">

@@ -5,16 +5,26 @@ import { authOptions } from "@/server/auth/options";
 
 const currentUserSelect = {
   id: true,
-  fullName: true,
   email: true,
   role: true,
-  universityId: true,
-  completedCreditHours: true,
-  isTransferredThisYear: true,
+  adminName: true,
   locale: true,
   isActive: true,
   mustChangePassword: true,
-  onboardingCompletedAt: true,
+  student: {
+    select: {
+      id: true,
+      universityId: true,
+      fullName: true,
+      completedCreditHours: true,
+      isTransferredThisYear: true,
+    },
+  },
+  requestedStudentLinks: {
+    select: { id: true, status: true },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+  },
 } satisfies Prisma.UserSelect;
 
 export type CurrentUser = Prisma.UserGetPayload<{
@@ -33,4 +43,11 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     where: { id: userId, isActive: true },
     select: currentUserSelect,
   });
+}
+
+export function currentUserDisplayName(user: CurrentUser) {
+  if (user.role === "STUDENT") {
+    return user.student?.fullName ?? user.email;
+  }
+  return user.adminName ? `Dr. ${user.adminName}` : user.email;
 }

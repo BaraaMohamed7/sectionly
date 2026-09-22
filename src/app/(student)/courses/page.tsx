@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation";
 import { requireStudent } from "@/server/authorization";
 import { getStudentCourseOverview } from "@/server/student-courses/service";
 import { CourseManagement } from "./course-management";
 
 export default async function StudentCoursesPage() {
   const student = await requireStudent();
-  if (!student.onboardingCompletedAt) redirect("/register/courses");
   const overview = await getStudentCourseOverview(student.id);
 
   return (

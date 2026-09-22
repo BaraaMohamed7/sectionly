@@ -14,7 +14,14 @@ export default async function AuthenticationContinuationPage() {
   }
 
   if (user.role === UserRole.STUDENT) {
-    redirect(user.onboardingCompletedAt ? "/dashboard" : "/register/courses");
+    if (!user.student) redirect("/student-link-status");
+    if (
+      user.student.completedCreditHours === null ||
+      user.student.isTransferredThisYear === null
+    ) {
+      redirect("/complete-profile");
+    }
+    redirect("/dashboard");
   }
 
   if (user.role === UserRole.SUPER_ADMIN) {

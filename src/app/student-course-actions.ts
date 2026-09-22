@@ -87,10 +87,6 @@ function actionError(error: unknown): StudentCourseActionState {
 function errorMessage(code: StudentCourseError["code"]) {
   const messages: Record<StudentCourseError["code"], string> = {
     FORBIDDEN: "Your student access changed. Sign in again and retry.",
-    ONBOARDING_ALREADY_COMPLETED:
-      "Course onboarding is already complete. Manage your courses instead.",
-    ONBOARDING_NOT_COMPLETED:
-      "Complete your initial course selection before managing courses.",
     COURSE_NOT_FOUND: "That course is no longer available.",
     ALREADY_ENROLLED: "You already selected this course.",
     NOT_ENROLLED: "This course is not in your selected courses.",

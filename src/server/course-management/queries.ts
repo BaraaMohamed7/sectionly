@@ -31,9 +31,9 @@ export async function listManageableCourses(
       admins: {
         select: {
           isPrimary: true,
-          admin: { select: { id: true, fullName: true } },
+          admin: { select: { id: true, adminName: true } },
         },
-        orderBy: [{ isPrimary: "desc" }, { admin: { fullName: "asc" } }],
+        orderBy: [{ isPrimary: "desc" }, { admin: { adminName: "asc" } }],
       },
     },
     orderBy: { code: "asc" },
@@ -71,14 +71,14 @@ export async function getManageableCourse(
           admin: {
             select: {
               id: true,
-              fullName: true,
+              adminName: true,
               email: true,
               role: true,
               isActive: true,
             },
           },
         },
-        orderBy: [{ isPrimary: "desc" }, { admin: { fullName: "asc" } }],
+        orderBy: [{ isPrimary: "desc" }, { admin: { adminName: "asc" } }],
       },
       sections: {
         select: {
@@ -93,7 +93,7 @@ export async function getManageableCourse(
           isPublished: true,
           updatedAt: true,
           responsibleAdmin: {
-            select: { admin: { select: { id: true, fullName: true } } },
+            select: { admin: { select: { id: true, adminName: true } } },
           },
           registrations: {
             select: {

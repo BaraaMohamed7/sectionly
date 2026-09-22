@@ -27,16 +27,18 @@ describe("student course action boundary", () => {
     const course = await createCourse();
     mockedRequireStudent.mockResolvedValue({
       id: sessionStudent.id,
-      fullName: sessionStudent.fullName,
       email: sessionStudent.email,
+      adminName: null,
       role: UserRole.STUDENT,
-      universityId: sessionStudent.universityId!,
-      completedCreditHours: sessionStudent.completedCreditHours!,
-      isTransferredThisYear: sessionStudent.isTransferredThisYear!,
       locale: Locale.EN,
       isActive: true,
       mustChangePassword: false,
-      onboardingCompletedAt: sessionStudent.onboardingCompletedAt,
+      student: {
+        ...sessionStudent.student,
+        completedCreditHours: sessionStudent.student.completedCreditHours!,
+        isTransferredThisYear: sessionStudent.student.isTransferredThisYear!,
+      },
+      requestedStudentLinks: [],
     });
     const formData = new FormData();
     formData.set("courseId", course.id);
@@ -49,7 +51,7 @@ describe("student course action boundary", () => {
       db.courseEnrollment.findUnique({
         where: {
           studentId_courseId: {
-            studentId: sessionStudent.id,
+            studentId: sessionStudent.student.id,
             courseId: course.id,
           },
         },
@@ -59,7 +61,7 @@ describe("student course action boundary", () => {
       db.courseEnrollment.findUnique({
         where: {
           studentId_courseId: {
-            studentId: otherStudent.id,
+            studentId: otherStudent.student.id,
             courseId: course.id,
           },
         },
@@ -70,20 +72,25 @@ describe("student course action boundary", () => {
 
 async function createOnboardedStudent() {
   const suffix = randomUUID();
-  const student = await db.user.create({
+  const user = await db.user.create({
     data: {
-      fullName: "Action Boundary Student",
       email: `action-student-${suffix}@example.com`,
       passwordHash:
         "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
       role: UserRole.STUDENT,
+    },
+  });
+  const student = await db.student.create({
+    data: {
+      userId: user.id,
+      fullName: "Action Boundary Student",
       universityId: `ACTION-${suffix}`,
       completedCreditHours: 10,
       isTransferredThisYear: false,
     },
   });
-  await completeStudentOnboarding(student.id, []);
-  return db.user.findUniqueOrThrow({ where: { id: student.id } });
+  await completeStudentOnboarding(user.id, []);
+  return { ...user, student };
 }
 
 async function createCourse() {

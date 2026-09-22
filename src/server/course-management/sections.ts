@@ -1,6 +1,9 @@
 import { Prisma } from "@/generated/prisma/client";
 import { AUDIT_ACTIONS } from "@/server/audit-actions";
-import { lockCourseManagementAccess } from "@/server/course-management/authorization";
+import {
+  assertCourseManagementAccess,
+  lockCourseManagementAccess,
+} from "@/server/course-management/authorization";
 import {
   emptyConflictPreview,
   findOperationalConflicts,
@@ -367,7 +370,17 @@ export async function confirmDeleteSection(
     typeof inputReviewedStateToken === "string" ? inputReviewedStateToken : "";
   const targetIds = [...new Set(transfers.map((item) => item.targetSectionId))];
 
+  await assertCourseManagementAccess(database, actor, course);
+
   return database.$transaction(async (transaction) => {
+    const discoveredRegistrations = await transaction.sectionRegistration.findMany({
+      where: { sectionId: source },
+      select: { studentId: true },
+    });
+    await lockStudentsForUpdate(
+      transaction,
+      discoveredRegistrations.map((registration) => registration.studentId),
+    );
     await lockCourseManagementAccess(transaction, actor, course, "SHARE");
     const sections = await lockSectionsForUpdate(transaction, [source, ...targetIds]);
     const sourceSection = sections.find(
@@ -651,6 +664,22 @@ async function lockSectionRegistrationsForUpdate(
     SELECT id
     FROM "SectionRegistration"
     WHERE "sectionId" IN (${Prisma.join(ids)})
+    ORDER BY id
+    FOR UPDATE
+  `);
+}
+
+async function lockStudentsForUpdate(
+  transaction: Prisma.TransactionClient,
+  studentIds: string[],
+) {
+  const ids = [...new Set(studentIds)].sort();
+  if (ids.length === 0) return;
+
+  await transaction.$queryRaw(Prisma.sql`
+    SELECT id
+    FROM "Student"
+    WHERE id IN (${Prisma.join(ids)})
     ORDER BY id
     FOR UPDATE
   `);

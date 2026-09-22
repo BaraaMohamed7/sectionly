@@ -76,7 +76,7 @@ export default async function CoursePage({
             <article className="admin-record-card" key={assignment.admin.id}>
               <div className="admin-record-summary">
                 <div>
-                  <h3>{assignment.admin.fullName}</h3>
+                  <h3>Dr. {assignment.admin.adminName}</h3>
                   <p>{assignment.admin.email}</p>
                 </div>
                 <div className="admin-badges">

@@ -4,11 +4,16 @@ import { z } from "zod";
 import {
   AccountConflictError,
   registerStudent,
+  StudentAccountUnavailableError,
 } from "@/server/auth/accounts";
 import { registerStudentSchema } from "@/server/auth/validation";
 
 export type RegistrationActionResult =
-  | { ok: true; email: string }
+  | {
+      ok: true;
+      email: string;
+      destination: "/register/courses" | "/student-link-status";
+    }
   | {
       ok: false;
       message?: string;
@@ -37,18 +42,25 @@ export async function registerStudentAction(
 
   try {
     const user = await registerStudent(result.data);
-    return { ok: true, email: user.email };
+    return {
+      ok: true,
+      email: user.email,
+      destination:
+        user.state === "LINKED" ? "/register/courses" : "/student-link-status",
+    };
   } catch (error) {
     if (error instanceof AccountConflictError) {
       return {
         ok: false,
         fieldErrors: {
-          [error.field]: [
-            error.field === "email"
-              ? "An account with this email already exists"
-              : "An account with this university ID already exists",
-          ],
+          [error.field]: ["An account with this email already exists"],
         },
+      };
+    }
+    if (error instanceof StudentAccountUnavailableError) {
+      return {
+        ok: false,
+        message: "We couldn't create an account with these details.",
       };
     }
 

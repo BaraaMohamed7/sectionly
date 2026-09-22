@@ -25,10 +25,6 @@ export default async function OnboardingCoursesPage() {
     throw error;
   }
 
-  if (student.onboardingCompletedAt) {
-    redirect("/dashboard");
-  }
-
   const courses = await listCoursesForOnboarding();
 
   return (
@@ -45,7 +41,7 @@ export default async function OnboardingCoursesPage() {
       <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-7 max-w-2xl">
           <p className="mb-2 text-sm font-bold tracking-wide text-blue-600 uppercase">
-            Welcome, {student.fullName}
+            Welcome, {student.student.fullName}
           </p>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Select the courses you are taking

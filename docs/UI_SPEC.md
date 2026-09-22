@@ -455,6 +455,29 @@ Good:\
 
 ---
 
+# 14.1 Student Identity Entry States
+
+After authentication, route a STUDENT account according to authoritative data:
+
+- no linked Student: `/student-link-status`,
+- linked Student with missing completed hours or transfer status:
+  `/complete-profile`,
+- linked and complete Student: normal Student routes.
+
+The link-status screen explains that a Super Admin must review the account. It
+must not reveal whether another account owns the university ID or expose
+private account details. Keep logout available.
+
+The complete-profile screen collects only the missing academic information:
+completed credit hours and transfer status. Profile completeness is derived
+from those values; do not show or persist an onboarding-completed state.
+
+Initial course selection may follow profile completion, but it is a navigation
+flow rather than an account gate. A Student may select zero courses and manage
+courses later.
+
+---
+
 # 15. Global Student Navigation
 
 Mobile:
@@ -1047,6 +1070,10 @@ Completed Credit Hours\
 Transferred This Year\
 Language
 
+Authentication and academic identity are separate. Display Student name and
+university information from the Student record, and email/account controls from
+the User account. Never expose internal IDs or imply that the two IDs match.
+
 Account actions:
 
 Change Password\
@@ -1575,6 +1602,9 @@ Courses\
 Admins\
 Audit Log
 
+Admin names are displayed with a `Dr.` prefix. The stored name does not contain
+the prefix.
+
 ---
 
 # 61. Super Admin — Courses
@@ -1618,11 +1648,24 @@ email,\
 role,\
 assigned courses.
 
+Also display pending Student link claims in an Identity Review section. Each
+claim shows the authoritative Student name and university ID plus the
+requesting account email.
+
 Actions where authorized:
 
 Create Admin\
 Manage Assignments\
 Change Role
+
+Pending claim actions:
+
+Approve Link\
+Reject
+
+Approval copy must state that academic records stay attached to the Student
+record. Rejection is non-destructive: neither the account nor academic record
+is deleted.
 
 Changing role requires confirmation.
 
@@ -1636,7 +1679,7 @@ block it and explain why.
 
 Fields:
 
-Full Name\
+Name after "Dr."\
 Email\
 Temporary Password
 

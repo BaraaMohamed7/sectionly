@@ -80,7 +80,7 @@ export async function findOperationalConflicts(
       responsibleAdminId: true,
       course: { select: { code: true } },
       responsibleAdmin: {
-        select: { admin: { select: { fullName: true } } },
+        select: { admin: { select: { adminName: true } } },
       },
     },
     orderBy: { id: "asc" },
@@ -95,7 +95,7 @@ export async function findOperationalConflicts(
     endMinute: section.endMinute,
     location: section.location,
     responsibleAdminId: section.responsibleAdminId,
-    responsibleAdminName: section.responsibleAdmin.admin.fullName,
+    responsibleAdminName: `Dr. ${section.responsibleAdmin.admin.adminName}`,
   }));
 
   return {
@@ -233,7 +233,7 @@ export function sectionsConflict(
 
 function mapStudentConflict(
   studentId: string,
-  student: { fullName: string; universityId: string | null },
+  student: { fullName: string; universityId: string },
   section: {
     id: string;
     sectionNumber: number;

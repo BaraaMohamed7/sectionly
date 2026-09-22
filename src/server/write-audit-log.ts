@@ -9,6 +9,8 @@ export async function writeAuditLog(
     action: AuditAction;
     entityType:
       | "User"
+      | "Student"
+      | "StudentLinkClaim"
       | "Course"
       | "CourseAdmin"
       | "CourseEnrollment"

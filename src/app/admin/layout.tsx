@@ -22,7 +22,7 @@ export default async function AdminLayout({
     redirect("/change-password");
   }
   if (user.role === UserRole.STUDENT) {
-    redirect(user.onboardingCompletedAt ? "/dashboard" : "/register/courses");
+    redirect("/auth/continue");
   }
 
   return (
@@ -40,7 +40,7 @@ export default async function AdminLayout({
           </span>
         </Link>
         <div className="admin-header-actions">
-          <span className="admin-user-name">{user.fullName}</span>
+          <span className="admin-user-name">Dr. {user.adminName}</span>
           <SignOutButton />
         </div>
       </header>

@@ -46,6 +46,13 @@ export const registerStudentSchema = z
   })
   .strict();
 
+export const completeStudentProfileSchema = z
+  .object({
+    completedCreditHours: completedCreditHoursSchema,
+    isTransferredThisYear: z.boolean(),
+  })
+  .strict();
+
 export const loginSchema = z
   .object({
     email: emailSchema,

@@ -40,7 +40,7 @@ export function RegistrationForm() {
         const signInResult = await signIn("credentials", {
           email: result.email,
           password,
-          callbackUrl: "/auth/continue",
+          callbackUrl: result.destination,
           redirect: false,
         });
 
@@ -52,7 +52,7 @@ export function RegistrationForm() {
           return;
         }
 
-        router.replace("/auth/continue");
+        router.replace(result.destination);
         router.refresh();
       } catch {
         setState({

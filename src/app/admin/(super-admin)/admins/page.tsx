@@ -3,13 +3,18 @@ import { UserRole } from "@/generated/prisma/client";
 import {
   AdminAccountControls,
   CreateAdminForm,
+  StudentLinkClaimControls,
 } from "@/app/admin/_components/admin-forms";
 import { requireSuperAdmin } from "@/server/authorization";
 import { listAdminAccounts } from "@/server/super-admin/admin-accounts";
+import { listPendingStudentLinkClaims } from "@/server/super-admin/student-links";
 
 export default async function AdminAccountsPage() {
   await requireSuperAdmin();
-  const admins = await listAdminAccounts();
+  const [admins, claims] = await Promise.all([
+    listAdminAccounts(),
+    listPendingStudentLinkClaims(),
+  ]);
 
   return (
     <div className="admin-page-stack">
@@ -36,6 +41,38 @@ export default async function AdminAccountsPage() {
       <section className="admin-panel">
         <div className="admin-section-heading">
           <div>
+            <p className="admin-eyebrow">Identity review</p>
+            <h2>{claims.length} pending Student links</h2>
+          </div>
+          <p>
+            Approval links the account only. Rejection preserves both the account
+            and academic Student record.
+          </p>
+        </div>
+        <div className="admin-card-list">
+          {claims.map((claim) => (
+            <article className="admin-record-card" key={claim.id}>
+              <div className="admin-record-summary">
+                <div>
+                  <h3>{claim.student.fullName}</h3>
+                  <p>
+                    {claim.student.universityId} · {claim.user.email}
+                  </p>
+                </div>
+                <span className="admin-badge admin-badge-amber">Pending</span>
+              </div>
+              <StudentLinkClaimControls claimId={claim.id} />
+            </article>
+          ))}
+          {claims.length === 0 ? (
+            <p className="admin-empty-state">No Student links need review.</p>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-section-heading">
+          <div>
             <p className="admin-eyebrow">Directory</p>
             <h2>{admins.length} Admin accounts</h2>
           </div>
@@ -45,7 +82,7 @@ export default async function AdminAccountsPage() {
             <article className="admin-record-card" key={admin.id}>
               <div className="admin-record-summary">
                 <div>
-                  <h3>{admin.fullName}</h3>
+                  <h3>Dr. {admin.adminName}</h3>
                   <p>{admin.email}</p>
                 </div>
                 <div className="admin-badges">

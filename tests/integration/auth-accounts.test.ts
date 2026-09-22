@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { UserRole } from "@/generated/prisma/client";
 import {
   AccountConflictError,
   authenticateCredentials,
   changePassword,
   registerStudent,
+  StudentAccountUnavailableError,
 } from "@/server/auth/accounts";
 import { verifyPassword } from "@/server/auth/password";
-import { db } from "@/server/db";
+import { createPrismaClient, db } from "@/server/db";
 
 const password = "correct horse battery staple";
+const firstClient = createPrismaClient();
+const secondClient = createPrismaClient();
+
+afterAll(async () => {
+  await Promise.all([firstClient.$disconnect(), secondClient.$disconnect()]);
+});
 
 function registrationInput() {
   const suffix = randomUUID();
@@ -31,13 +38,20 @@ describe("student accounts", () => {
     const account = await registerStudent(input);
     const stored = await db.user.findUniqueOrThrow({
       where: { id: account.id },
+      include: { student: true },
     });
 
     expect(stored.email).toBe(input.email);
     expect(stored.role).toBe(UserRole.STUDENT);
     expect(stored.isActive).toBe(true);
     expect(stored.mustChangePassword).toBe(false);
-    expect(stored.onboardingCompletedAt).toBeNull();
+    expect(stored.student).toMatchObject({
+      fullName: input.fullName,
+      universityId: input.universityId,
+      completedCreditHours: input.completedCreditHours,
+      isTransferredThisYear: input.isTransferredThisYear,
+    });
+    expect(stored.student?.id).not.toBe(stored.id);
     expect(stored.passwordHash).not.toBe(input.password);
     expect(stored.passwordHash).toMatch(/^\$2[aby]\$12\$/);
     await expect(verifyPassword(input.password, stored.passwordHash)).resolves.toBe(
@@ -45,7 +59,7 @@ describe("student accounts", () => {
     );
   });
 
-  it("normalizes email and rejects duplicate email or university ID", async () => {
+  it("normalizes email and rejects a duplicate email", async () => {
     const input = registrationInput();
     const first = await registerStudent({
       ...input,
@@ -61,14 +75,70 @@ describe("student accounts", () => {
       }),
     ).rejects.toMatchObject({ field: "email" } satisfies Partial<AccountConflictError>);
 
+  });
+
+  it("creates a pending claim for an existing unlinked Student", async () => {
+    const input = registrationInput();
+    const student = await db.student.create({
+      data: {
+        fullName: "Authoritative Student Name",
+        universityId: input.universityId,
+      },
+    });
+
+    const result = await registerStudent(input);
+
+    expect(result).toMatchObject({ state: "PENDING_CLAIM" });
+    if (result.state !== "PENDING_CLAIM") {
+      throw new Error("Expected a pending Student link claim");
+    }
+    await expect(
+      db.user.findUniqueOrThrow({
+        where: { id: result.id },
+        select: { student: true },
+      }),
+    ).resolves.toMatchObject({ student: null });
+    await expect(
+      db.studentLinkClaim.findUniqueOrThrow({
+        where: { id: result.claimId },
+      }),
+    ).resolves.toMatchObject({
+      studentId: student.id,
+      userId: result.id,
+      status: "PENDING",
+    });
+    await expect(
+      authenticateCredentials({ email: input.email, password: input.password }),
+    ).resolves.toMatchObject({ name: input.email });
+  });
+
+  it("does not reveal whether an existing Student is already linked", async () => {
+    const linked = await registerStudent(registrationInput());
+
     await expect(
       registerStudent({
         ...registrationInput(),
-        universityId: input.universityId,
+        universityId: (
+          await db.student.findUniqueOrThrow({ where: { userId: linked.id } })
+        ).universityId,
       }),
-    ).rejects.toMatchObject({
-      field: "universityId",
-    } satisfies Partial<AccountConflictError>);
+    ).rejects.toBeInstanceOf(StudentAccountUnavailableError);
+  });
+
+  it("returns the same unavailable result when identical registrations race", async () => {
+    const input = registrationInput();
+
+    const results = await Promise.allSettled([
+      registerStudent(input, firstClient),
+      registerStudent(input, secondClient),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((result) => result.status === "rejected");
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      reason: expect.any(StudentAccountUnavailableError),
+    });
   });
 
   it("prevents public role escalation", async () => {

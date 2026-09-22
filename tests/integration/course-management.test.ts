@@ -37,6 +37,8 @@ beforeEach(async () => {
   await db.section.deleteMany();
   await db.courseAdmin.deleteMany();
   await db.course.deleteMany();
+  await db.studentLinkClaim.deleteMany();
+  await db.student.deleteMany();
   await db.user.deleteMany();
 });
 
@@ -851,23 +853,38 @@ async function createUser(role: UserRole) {
   const suffix = randomUUID();
   return db.user.create({
     data: {
-      fullName: `${role} Course Manager`,
+      adminName: `${role} Course Manager`,
       email: `manager-${suffix}@example.com`,
       passwordHash:
         "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
       role,
       isActive: true,
       mustChangePassword: false,
-      universityId: role === UserRole.STUDENT ? `STUDENT-${suffix}` : null,
-      completedCreditHours: role === UserRole.STUDENT ? 0 : null,
-      isTransferredThisYear: role === UserRole.STUDENT ? false : null,
-      onboardingCompletedAt: role === UserRole.STUDENT ? new Date() : null,
     },
   });
 }
 
-function createStudent() {
-  return createUser(UserRole.STUDENT);
+async function createStudent() {
+  const suffix = randomUUID();
+  const user = await db.user.create({
+    data: {
+      email: `student-manager-${suffix}@example.com`,
+      passwordHash:
+        "$2b$12$o.suRJmHqKH.vPofp/RnT.pcvzQVYKsZ3CvXutZ9wXcF7dqBPIpEm",
+      role: UserRole.STUDENT,
+      isActive: true,
+      mustChangePassword: false,
+    },
+  });
+  return db.student.create({
+    data: {
+      userId: user.id,
+      fullName: "Course Management Student",
+      universityId: `STUDENT-${suffix}`,
+      completedCreditHours: 0,
+      isTransferredThisYear: false,
+    },
+  });
 }
 
 async function createCourse() {

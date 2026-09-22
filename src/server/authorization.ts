@@ -5,7 +5,8 @@ export type AuthorizationErrorCode =
   | "UNAUTHENTICATED"
   | "PASSWORD_CHANGE_REQUIRED"
   | "FORBIDDEN"
-  | "INVALID_STUDENT_STATE";
+  | "STUDENT_LINK_REQUIRED"
+  | "STUDENT_PROFILE_INCOMPLETE";
 
 export class AuthorizationError extends Error {
   constructor(readonly code: AuthorizationErrorCode) {
@@ -16,9 +17,15 @@ export class AuthorizationError extends Error {
 
 export type CurrentStudent = CurrentUser & {
   role: typeof UserRole.STUDENT;
-  universityId: string;
-  completedCreditHours: number;
-  isTransferredThisYear: boolean;
+  student: NonNullable<CurrentUser["student"]> & {
+    completedCreditHours: number;
+    isTransferredThisYear: boolean;
+  };
+};
+
+export type CurrentLinkedStudent = CurrentUser & {
+  role: typeof UserRole.STUDENT;
+  student: NonNullable<CurrentUser["student"]>;
 };
 
 export type CurrentSuperAdmin = CurrentUser & {
@@ -46,21 +53,30 @@ export async function requireUser() {
 }
 
 export async function requireStudent(): Promise<CurrentStudent> {
+  const user = await requireLinkedStudent();
+
+  if (
+    user.student.completedCreditHours === null ||
+    user.student.isTransferredThisYear === null
+  ) {
+    throw new AuthorizationError("STUDENT_PROFILE_INCOMPLETE");
+  }
+
+  return user as CurrentStudent;
+}
+
+export async function requireLinkedStudent(): Promise<CurrentLinkedStudent> {
   const user = await requireUser();
 
   if (user.role !== UserRole.STUDENT) {
     throw new AuthorizationError("FORBIDDEN");
   }
 
-  if (
-    user.universityId === null ||
-    user.completedCreditHours === null ||
-    user.isTransferredThisYear === null
-  ) {
-    throw new AuthorizationError("INVALID_STUDENT_STATE");
+  if (!user.student) {
+    throw new AuthorizationError("STUDENT_LINK_REQUIRED");
   }
 
-  return user as CurrentStudent;
+  return user as CurrentLinkedStudent;
 }
 
 export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
