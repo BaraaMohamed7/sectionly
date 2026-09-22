@@ -7,6 +7,7 @@ import {
 import { AUDIT_ACTIONS } from "@/server/audit-actions";
 import { createPrismaClient, db } from "@/server/db";
 import { completeStudentProfile, StudentProfileError } from "@/server/student-profile";
+import { getStudentCourseOverview } from "@/server/student-courses/service";
 import { SuperAdminError } from "@/server/super-admin/errors";
 import { resolveStudentLinkClaim } from "@/server/super-admin/student-links";
 
@@ -136,11 +137,168 @@ describe("Student identity", () => {
     ).resolves.toMatchObject({ entityType: "StudentLinkClaim" });
   });
 
+  it("fills only missing profile fields from an approved claim", async () => {
+    const actor = await createUser(UserRole.SUPER_ADMIN);
+    const requester = await createUser(UserRole.STUDENT);
+    const student = await createUnlinkedStudent({
+      fullName: "Authoritative Ahmed Mohamed",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedFullName: "Ahmed M. Mohamed",
+      proposedCompletedCreditHours: 65,
+      proposedIsTransferredThisYear: false,
+    });
+
+    await resolveStudentLinkClaim(actor.id, claim.id, "approve");
+
+    await expect(
+      db.student.findUniqueOrThrow({ where: { id: student.id } }),
+    ).resolves.toMatchObject({
+      fullName: "Authoritative Ahmed Mohamed",
+      completedCreditHours: 65,
+      isTransferredThisYear: false,
+      userId: requester.id,
+    });
+    await expect(getStudentCourseOverview(requester.id)).resolves.toMatchObject({
+      totalCreditHours: 0,
+    });
+    await expect(
+      db.auditLog.findFirstOrThrow({
+        where: {
+          entityId: claim.id,
+          action: AUDIT_ACTIONS.STUDENT_LINK_CLAIM_APPROVED,
+        },
+      }),
+    ).resolves.toMatchObject({
+      metadata: {
+        profileFieldsPopulatedFromClaim: {
+          completedCreditHours: true,
+          isTransferredThisYear: true,
+        },
+      },
+    });
+  });
+
+  it("preserves non-null authoritative profile fields during approval", async () => {
+    const actor = await createUser(UserRole.SUPER_ADMIN);
+    const requester = await createUser(UserRole.STUDENT);
+    const student = await createUnlinkedStudent({
+      fullName: "Existing Authoritative Name",
+      completedCreditHours: 90,
+      isTransferredThisYear: true,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedFullName: "Different Submitted Name",
+      proposedCompletedCreditHours: 12,
+      proposedIsTransferredThisYear: false,
+    });
+
+    await resolveStudentLinkClaim(actor.id, claim.id, "approve");
+
+    await expect(
+      db.student.findUniqueOrThrow({ where: { id: student.id } }),
+    ).resolves.toMatchObject({
+      fullName: "Existing Authoritative Name",
+      completedCreditHours: 90,
+      isTransferredThisYear: true,
+      userId: requester.id,
+    });
+    await expect(
+      db.auditLog.findFirstOrThrow({
+        where: {
+          entityId: claim.id,
+          action: AUDIT_ACTIONS.STUDENT_LINK_CLAIM_APPROVED,
+        },
+      }),
+    ).resolves.toMatchObject({
+      metadata: {
+        profileFieldsPopulatedFromClaim: {
+          completedCreditHours: false,
+          isTransferredThisYear: false,
+        },
+      },
+    });
+  });
+
+  it("preserves profile fields populated before approval acquires the Student lock", async () => {
+    const actor = await createUser(UserRole.SUPER_ADMIN);
+    const requester = await createUser(UserRole.STUDENT);
+    const student = await createUnlinkedStudent({
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedCompletedCreditHours: 12,
+      proposedIsTransferredThisYear: false,
+    });
+    let releaseStudentLock!: () => void;
+    let reportStudentLock!: () => void;
+    const studentLockHeld = new Promise<void>((resolve) => {
+      reportStudentLock = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseStudentLock = resolve;
+    });
+    const concurrentProfileUpdate = firstClient.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT id
+        FROM "Student"
+        WHERE id = ${student.id}::uuid
+        FOR UPDATE
+      `;
+      reportStudentLock();
+      await release;
+      await transaction.student.update({
+        where: { id: student.id },
+        data: {
+          completedCreditHours: 77,
+          isTransferredThisYear: true,
+        },
+      });
+    });
+    await studentLockHeld;
+
+    const approval = resolveStudentLinkClaim(
+      actor.id,
+      claim.id,
+      "approve",
+      secondClient,
+    );
+    let lockWaitError: unknown;
+    try {
+      await waitForStudentLockWait();
+    } catch (error) {
+      lockWaitError = error;
+    } finally {
+      releaseStudentLock();
+    }
+    await Promise.all([concurrentProfileUpdate, approval]);
+    if (lockWaitError) throw lockWaitError;
+
+    await expect(
+      db.student.findUniqueOrThrow({ where: { id: student.id } }),
+    ).resolves.toMatchObject({
+      completedCreditHours: 77,
+      isTransferredThisYear: true,
+      userId: requester.id,
+    });
+  });
+
   it("allows only a Super Admin to approve a claim", async () => {
     const actor = await createUser(UserRole.ADMIN);
     const requester = await createUser(UserRole.STUDENT);
-    const student = await createUnlinkedStudent();
-    const claim = await createClaim(student.id, requester.id);
+    const student = await createUnlinkedStudent({
+      fullName: "Rejected Authoritative Name",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedFullName: "Rejected Proposed Name",
+      proposedCompletedCreditHours: 42,
+      proposedIsTransferredThisYear: true,
+    });
 
     await expect(
       resolveStudentLinkClaim(actor.id, claim.id, "approve"),
@@ -152,14 +310,61 @@ describe("Student identity", () => {
     ).resolves.toMatchObject({ status: StudentLinkClaimStatus.PENDING });
     await expect(
       db.student.findUniqueOrThrow({ where: { id: student.id } }),
-    ).resolves.toMatchObject({ userId: null });
+    ).resolves.toMatchObject({
+      fullName: "Rejected Authoritative Name",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+      userId: null,
+    });
+    await expect(
+      db.studentLinkClaim.findUniqueOrThrow({ where: { id: claim.id } }),
+    ).resolves.toMatchObject({
+      proposedFullName: "Rejected Proposed Name",
+      proposedCompletedCreditHours: 42,
+      proposedIsTransferredThisYear: true,
+    });
+  });
+
+  it("links a historical claim without proposals and leaves the profile incomplete", async () => {
+    const actor = await createUser(UserRole.SUPER_ADMIN);
+    const requester = await createUser(UserRole.STUDENT);
+    const student = await createUnlinkedStudent({
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedFullName: null,
+      proposedCompletedCreditHours: null,
+      proposedIsTransferredThisYear: null,
+    });
+
+    await resolveStudentLinkClaim(actor.id, claim.id, "approve");
+
+    await expect(
+      db.student.findUniqueOrThrow({ where: { id: student.id } }),
+    ).resolves.toMatchObject({
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+      userId: requester.id,
+    });
+    await expect(getStudentCourseOverview(requester.id)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 
   it("revalidates approval eligibility but still permits rejection", async () => {
     const actor = await createUser(UserRole.SUPER_ADMIN);
     const requester = await createUser(UserRole.STUDENT);
-    const student = await createUnlinkedStudent();
-    const claim = await createClaim(student.id, requester.id);
+    const student = await createUnlinkedStudent({
+      fullName: "Rejected Student Record",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+    });
+    const claim = await createClaim(student.id, requester.id, {
+      proposedFullName: "Rejected Submitted Name",
+      proposedCompletedCreditHours: 42,
+      proposedIsTransferredThisYear: true,
+    });
     await db.user.update({
       where: { id: requester.id },
       data: { isActive: false },
@@ -183,7 +388,19 @@ describe("Student identity", () => {
     ).resolves.not.toBeNull();
     await expect(
       db.student.findUniqueOrThrow({ where: { id: student.id } }),
-    ).resolves.toMatchObject({ userId: null });
+    ).resolves.toMatchObject({
+      fullName: "Rejected Student Record",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+      userId: null,
+    });
+    await expect(
+      db.studentLinkClaim.findUniqueOrThrow({ where: { id: claim.id } }),
+    ).resolves.toMatchObject({
+      proposedFullName: "Rejected Submitted Name",
+      proposedCompletedCreditHours: 42,
+      proposedIsTransferredThisYear: true,
+    });
   });
 
   it("serializes concurrent decisions so exactly one resolution commits", async () => {
@@ -229,6 +446,38 @@ describe("Student identity", () => {
     await expect(createClaim(firstStudent.id, secondUser.id)).rejects.toThrow();
     await expect(createClaim(secondStudent.id, firstUser.id)).rejects.toThrow();
   });
+
+  it("rejects a negative proposed completed-credit-hour value at the database", async () => {
+    const student = await createUnlinkedStudent();
+    const user = await createUser(UserRole.STUDENT);
+
+    await expect(
+      db.studentLinkClaim.create({
+        data: {
+          studentId: student.id,
+          userId: user.id,
+          proposedFullName: "Invalid Proposal",
+          proposedCompletedCreditHours: -1,
+          proposedIsTransferredThisYear: false,
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a partially captured proposed profile at the database", async () => {
+    const student = await createUnlinkedStudent();
+    const user = await createUser(UserRole.STUDENT);
+
+    await expect(
+      db.studentLinkClaim.create({
+        data: {
+          studentId: student.id,
+          userId: user.id,
+          proposedFullName: "Partial Proposal",
+        },
+      }),
+    ).rejects.toThrow();
+  });
 });
 
 async function createUser(role: UserRole) {
@@ -259,18 +508,50 @@ async function createLinkedStudent({ complete }: { complete: boolean }) {
   return { user, student };
 }
 
-function createUnlinkedStudent() {
+function createUnlinkedStudent(
+  overrides: {
+    fullName?: string;
+    completedCreditHours?: number | null;
+    isTransferredThisYear?: boolean | null;
+  } = {},
+) {
   return db.student.create({
     data: {
-      fullName: "Unlinked Identity Student",
+      fullName: overrides.fullName ?? "Unlinked Identity Student",
       universityId: `IDENTITY-${randomUUID()}`,
+      completedCreditHours: overrides.completedCreditHours,
+      isTransferredThisYear: overrides.isTransferredThisYear,
     },
   });
 }
 
-function createClaim(studentId: string, userId: string) {
+function createClaim(
+  studentId: string,
+  userId: string,
+  proposal: {
+    proposedFullName?: string | null;
+    proposedCompletedCreditHours?: number | null;
+    proposedIsTransferredThisYear?: boolean | null;
+  } = {},
+) {
   return db.studentLinkClaim.create({
-    data: { studentId, userId, status: StudentLinkClaimStatus.PENDING },
+    data: {
+      studentId,
+      userId,
+      proposedFullName:
+        proposal.proposedFullName === undefined
+          ? "Submitted Identity Student"
+          : proposal.proposedFullName,
+      proposedCompletedCreditHours:
+        proposal.proposedCompletedCreditHours === undefined
+          ? 30
+          : proposal.proposedCompletedCreditHours,
+      proposedIsTransferredThisYear:
+        proposal.proposedIsTransferredThisYear === undefined
+          ? false
+          : proposal.proposedIsTransferredThisYear,
+      status: StudentLinkClaimStatus.PENDING,
+    },
   });
 }
 
@@ -284,4 +565,19 @@ function createCourse() {
       creditHours: 3,
     },
   });
+}
+
+async function waitForStudentLockWait() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const rows = await db.$queryRaw<Array<{ waiting: number }>>`
+      SELECT count(*)::int AS waiting
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND "wait_event_type" = 'Lock'
+        AND query LIKE '%FROM "Student"%FOR UPDATE%'
+    `;
+    if (rows[0]!.waiting > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Approval did not wait for the locked Student row");
 }

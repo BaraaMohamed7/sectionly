@@ -102,6 +102,9 @@ export async function registerStudent(
         data: {
           studentId: existingStudent.id,
           userId: user.id,
+          proposedFullName: data.fullName,
+          proposedCompletedCreditHours: data.completedCreditHours,
+          proposedIsTransferredThisYear: data.isTransferredThisYear,
           status: StudentLinkClaimStatus.PENDING,
         },
         select: { id: true },

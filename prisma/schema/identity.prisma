@@ -35,13 +35,16 @@ model Student {
 }
 
 model StudentLinkClaim {
-  id           String                 @id @default(uuid()) @db.Uuid
-  studentId    String                 @db.Uuid
-  userId       String                 @db.Uuid
-  status       StudentLinkClaimStatus @default(PENDING)
-  resolvedById String?                @db.Uuid
-  createdAt    DateTime               @default(now()) @db.Timestamptz(3)
-  resolvedAt   DateTime?              @db.Timestamptz(3)
+  id                            String                 @id @default(uuid()) @db.Uuid
+  studentId                     String                 @db.Uuid
+  userId                        String                 @db.Uuid
+  proposedFullName              String?
+  proposedCompletedCreditHours  Int?
+  proposedIsTransferredThisYear Boolean?
+  status                        StudentLinkClaimStatus @default(PENDING)
+  resolvedById                  String?                @db.Uuid
+  createdAt                     DateTime               @default(now()) @db.Timestamptz(3)
+  resolvedAt                    DateTime?              @db.Timestamptz(3)
 
   student    Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
   user       User    @relation("StudentLinkRequester", fields: [userId], references: [id], onDelete: Restrict)

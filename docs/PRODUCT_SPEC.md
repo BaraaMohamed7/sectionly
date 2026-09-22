@@ -158,8 +158,14 @@ selection.
 
 If the university ID belongs to an existing unlinked Student record, account
 creation creates a separate User and a pending StudentLinkClaim. Student
-features remain blocked until a Super Admin approves the link. Submitted data
-must not overwrite the existing academic record.
+features remain blocked until a Super Admin approves the link. The claim retains
+the submitted name, completed hours, and transfer status as unverified proposed
+data, but registration must not overwrite the existing academic record.
+
+On approval, the existing Student name remains authoritative. Proposed
+completed hours and transfer status fill only corresponding null Student fields;
+non-null Student values are never replaced automatically. Rejection applies no
+proposed values and retains the resolved claim as history.
 
 If the existing Student is already linked, registration returns a generic
 unavailable response without disclosing account ownership.

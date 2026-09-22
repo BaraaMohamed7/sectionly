@@ -222,16 +222,20 @@ Public registration behavior:
 - a new university ID creates a linked User and Student atomically,
 
 - an existing unlinked Student creates a separate User and pending
-  StudentLinkClaim,
+  StudentLinkClaim containing the submitted name, completed credit hours, and
+  transfer status as unverified proposed values,
 
 - an existing linked Student receives a generic unavailable response that does
   not reveal account details.
 
 Only an active, password-ready SUPER_ADMIN may approve or reject pending link
-claims. Approval links Student.userId without moving or rewriting academic
-records. Rejection preserves both records. Claim resolution must lock and
-revalidate the actor User, requesting User, Student, and claim, then write the
-audit row in the same transaction.
+claims. Approval links Student.userId without moving academic records. It may
+fill null completedCreditHours or isTransferredThisYear from the locked claim,
+but it must preserve every non-null Student value and must never replace
+Student.fullName automatically. Rejection preserves both records and the claim's
+proposed values. Claim resolution must lock and revalidate the actor User,
+requesting User, Student, and claim, then write the audit row in the same
+transaction.
 
 Student aggregate mutations must first authorize the User from an authoritative
 database row, then lock the linked Student row as the per-student serialization

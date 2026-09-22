@@ -1649,8 +1649,15 @@ role,\
 assigned courses.
 
 Also display pending Student link claims in an Identity Review section. Each
-claim shows the authoritative Student name and university ID plus the
-requesting account email.
+claim clearly separates:
+
+- the existing authoritative Student name, university ID, completed hours, and
+  transfer status,
+- the unverified proposed name, completed hours, and transfer status submitted
+  during registration, plus the requesting account email.
+
+Use explicit labels such as "Existing academic record" and "Submitted account
+data". Do not visually present proposed values as authoritative.
 
 Actions where authorized:
 

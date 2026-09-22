@@ -45,8 +45,8 @@ export default async function AdminAccountsPage() {
             <h2>{claims.length} pending Student links</h2>
           </div>
           <p>
-            Approval links the account only. Rejection preserves both the account
-            and academic Student record.
+            Approval links the account and may fill missing profile fields from
+            the submitted data. Rejection preserves both records unchanged.
           </p>
         </div>
         <div className="admin-card-list">
@@ -54,12 +54,63 @@ export default async function AdminAccountsPage() {
             <article className="admin-record-card" key={claim.id}>
               <div className="admin-record-summary">
                 <div>
-                  <h3>{claim.student.fullName}</h3>
-                  <p>
-                    {claim.student.universityId} · {claim.user.email}
-                  </p>
+                  <h3>{claim.student.universityId}</h3>
+                  <p>Compare the academic record with the submitted claim.</p>
                 </div>
                 <span className="admin-badge admin-badge-amber">Pending</span>
+              </div>
+              <div className="admin-identity-comparison">
+                <section>
+                  <h4>Existing academic record</h4>
+                  <dl>
+                    <IdentityValue label="Full name" value={claim.student.fullName} />
+                    <IdentityValue
+                      label="University ID"
+                      value={claim.student.universityId}
+                    />
+                    <IdentityValue
+                      label="Completed credit hours"
+                      value={formatCreditHours(
+                        claim.student.completedCreditHours,
+                        "Not recorded",
+                      )}
+                    />
+                    <IdentityValue
+                      label="Transferred this year"
+                      value={formatBoolean(
+                        claim.student.isTransferredThisYear,
+                        "Not recorded",
+                      )}
+                    />
+                  </dl>
+                </section>
+                <section>
+                  <h4>Submitted account data</h4>
+                  <p className="admin-unverified-note">
+                    User-submitted and unverified until this claim is approved.
+                  </p>
+                  <dl>
+                    <IdentityValue
+                      label="Proposed full name"
+                      value={claim.proposedFullName ?? "Not captured"}
+                    />
+                    <IdentityValue
+                      label="Proposed completed credit hours"
+                      value={formatCreditHours(
+                        claim.proposedCompletedCreditHours,
+                        "Not captured",
+                      )}
+                    />
+                    <IdentityValue
+                      label="Proposed transferred this year"
+                      value={formatBoolean(
+                        claim.proposedIsTransferredThisYear,
+                        "Not captured",
+                      )}
+                    />
+                    <IdentityValue label="Account email" value={claim.user.email} />
+                  </dl>
+                </section>
               </div>
               <StudentLinkClaimControls claimId={claim.id} />
             </article>
@@ -122,4 +173,21 @@ export default async function AdminAccountsPage() {
       </section>
     </div>
   );
+}
+
+function IdentityValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function formatCreditHours(value: number | null, missing: string) {
+  return value === null ? missing : `${value} hours`;
+}
+
+function formatBoolean(value: boolean | null, missing: string) {
+  return value === null ? missing : value ? "Yes" : "No";
 }

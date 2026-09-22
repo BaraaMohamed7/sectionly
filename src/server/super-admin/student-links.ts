@@ -21,6 +21,9 @@ export async function listPendingStudentLinkClaims() {
     select: {
       id: true,
       createdAt: true,
+      proposedFullName: true,
+      proposedCompletedCreditHours: true,
+      proposedIsTransferredThisYear: true,
       user: { select: { id: true, email: true, isActive: true } },
       student: {
         select: {
@@ -60,9 +63,14 @@ export async function resolveStudentLinkClaim(
     const requestingUser = users.find((user) => user.id === discovered.userId);
 
     const students = await transaction.$queryRaw<
-      Array<{ id: string; userId: string | null }>
+      Array<{
+        id: string;
+        userId: string | null;
+        completedCreditHours: number | null;
+        isTransferredThisYear: boolean | null;
+      }>
     >`
-      SELECT id, "userId"
+      SELECT id, "userId", "completedCreditHours", "isTransferredThisYear"
       FROM "Student"
       WHERE id = ${discovered.studentId}::uuid
       FOR UPDATE
@@ -73,9 +81,19 @@ export async function resolveStudentLinkClaim(
         userId: string;
         studentId: string;
         status: StudentLinkClaimStatus;
+        proposedFullName: string | null;
+        proposedCompletedCreditHours: number | null;
+        proposedIsTransferredThisYear: boolean | null;
       }>
     >`
-      SELECT id, "userId", "studentId", status
+      SELECT
+        id,
+        "userId",
+        "studentId",
+        status,
+        "proposedFullName",
+        "proposedCompletedCreditHours",
+        "proposedIsTransferredThisYear"
       FROM "StudentLinkClaim"
       WHERE id = ${claim}::uuid
       FOR UPDATE
@@ -96,6 +114,11 @@ export async function resolveStudentLinkClaim(
       throw new SuperAdminError("INVALID_STUDENT_LINK_USER");
     }
 
+    const profileFieldsPopulatedFromClaim = {
+      completedCreditHours: false,
+      isTransferredThisYear: false,
+    };
+
     if (decision === "approve") {
       if (
         requestingUser.role !== UserRole.STUDENT ||
@@ -113,9 +136,30 @@ export async function resolveStudentLinkClaim(
       });
       if (existingLink) throw new SuperAdminError("STUDENT_ALREADY_LINKED");
 
+      profileFieldsPopulatedFromClaim.completedCreditHours =
+        student.completedCreditHours === null &&
+        lockedClaim.proposedCompletedCreditHours !== null;
+      profileFieldsPopulatedFromClaim.isTransferredThisYear =
+        student.isTransferredThisYear === null &&
+        lockedClaim.proposedIsTransferredThisYear !== null;
+
       await transaction.student.update({
         where: { id: student.id },
-        data: { userId: requestingUser.id },
+        data: {
+          userId: requestingUser.id,
+          ...(profileFieldsPopulatedFromClaim.completedCreditHours
+            ? {
+                completedCreditHours:
+                  lockedClaim.proposedCompletedCreditHours,
+              }
+            : {}),
+          ...(profileFieldsPopulatedFromClaim.isTransferredThisYear
+            ? {
+                isTransferredThisYear:
+                  lockedClaim.proposedIsTransferredThisYear,
+              }
+            : {}),
+        },
       });
     }
 
@@ -139,6 +183,9 @@ export async function resolveStudentLinkClaim(
       metadata: {
         studentId: student.id,
         userId: requestingUser.id,
+        ...(decision === "approve"
+          ? { profileFieldsPopulatedFromClaim }
+          : {}),
       },
     });
     return resolved;

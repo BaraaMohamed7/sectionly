@@ -106,6 +106,17 @@ describe("student accounts", () => {
       studentId: student.id,
       userId: result.id,
       status: "PENDING",
+      proposedFullName: input.fullName,
+      proposedCompletedCreditHours: input.completedCreditHours,
+      proposedIsTransferredThisYear: input.isTransferredThisYear,
+    });
+    await expect(
+      db.student.findUniqueOrThrow({ where: { id: student.id } }),
+    ).resolves.toMatchObject({
+      fullName: "Authoritative Student Name",
+      completedCreditHours: null,
+      isTransferredThisYear: null,
+      userId: null,
     });
     await expect(
       authenticateCredentials({ email: input.email, password: input.password }),
